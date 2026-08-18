@@ -19,9 +19,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-^p)!hv7&89#xy9mvmro_cm5@8iv0n=k^%1+mauv%cx!w8=q5ri'
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
@@ -125,3 +122,18 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+FILE_CHARSET = 'UTF-8'
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv()  # Loads variables from .env
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GITHUB_PERSONAL_ACCESS_TOKEN = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.getenv("SECRET_KEY")
