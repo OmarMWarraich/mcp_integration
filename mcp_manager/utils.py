@@ -33,13 +33,14 @@ def mcp_tool(
     tool_name: str,
     arguments: dict[str, Any],
     toolsets: str = "repos",
-) -> dict[str, Any] | list[dict[str, Any]] | str | None:
+    read_only: bool = False,
+) -> Any:
     """
-    Execute an MCP tool via mcpcurl using the generated CLI command for the tool.
+    Invoke a GitHub MCP tool via mcpcurl.
 
-    toolsets must stay minimal: the 'issues' toolset schema contains a union-typed
-    property that breaks mcpcurl's dynamic command generation, disabling ALL tool
-    subcommands (symptom: "unknown flag: --owner").
+    read_only=True passes --read-only to github-mcp-server, excluding write tools
+    like 'issue_write', whose union-typed schema breaks mcpcurl's dynamic command
+    generation, disabling ALL tool subcommands (symptom: "unknown flag: --owner").
 
     Example:
         mcp_tool("get_file_contents", {"owner": "octo", "repo": "hello", "path": "/"})
@@ -55,10 +56,15 @@ def mcp_tool(
         print("Error: GITHUB_MCP_SERVER environment variable is not set.")
         return None
 
+    server_cmd = f"{github_mcp_server_path} --toolsets {toolsets}"
+    if read_only:
+        server_cmd += " --read-only"
+    server_cmd += " stdio"
+
     base_command = [
         mcpcurl_path,
         "--stdio-server-cmd",
-        f"{github_mcp_server_path} --toolsets {toolsets} stdio",
+        server_cmd,
         "tools",
         tool_name,
         * _build_mcpcurl_args(arguments),
@@ -103,125 +109,3 @@ def mcp_tool(
     except Exception as exc:
         print(f"An unexpected error occurred while running mcpcurl: {exc}")
         return None
-
-
-# def get_repository_tree(owner: str, repo: str, path: str = ".") -> list[dict]:
-#     """
-#     Return a GitHub repository tree for the requested folder using the GitHub API,
-#     which is more reliable than the current mcpcurl wrapper.
-#     """
-#     token = os.getenv('GITHUB_PERSONAL_ACCESS_TOKEN')
-#     try:
-#         token = token or getattr(settings, 'GITHUB_PERSONAL_ACCESS_TOKEN', None)
-#     except Exception:
-#         pass
-
-#     headers = {'Accept': 'application/vnd.github+json'}
-#     if token:
-#         headers['Authorization'] = f'Bearer {token}'
-
-#     url = f'https://api.github.com/repos/{owner}/{repo}/git/trees/HEAD?recursive=1'
-#     response = requests.get(url, headers=headers, timeout=30)
-#     response.raise_for_status()
-#     tree = response.json().get('tree', [])
-
-#     normalized_path = path.strip('/') if path and path != '.' else ''
-#     items: list[dict] = []
-#     for entry in tree:
-#         entry_path = entry.get('path', '')
-#         if not entry_path:
-#             continue
-
-#         if normalized_path:
-#             if entry_path == normalized_path:
-#                 continue
-#             if not entry_path.startswith(f'{normalized_path}/'):
-#                 continue
-#             rel_path = entry_path[len(normalized_path) + 1:]
-#         else:
-#             rel_path = entry_path
-
-#         if '/' in rel_path:
-#             continue
-
-#         item = dict(entry)
-#         item['relative_path'] = rel_path
-#         item['html_url'] = f'https://github.com/{owner}/{repo}/blob/main/{entry_path}' if entry.get('type') == 'blob' else f'https://github.com/{owner}/{repo}/tree/main/{entry_path}'
-#         items.append(item)
-
-#     return items
-
-
-def get_repository_issues(owner: str, repo: str, state: str = 'open', per_page: int = 5) -> list[dict]:
-    """Return open issues for a repo using the GitHub REST API."""
-    token = os.getenv('GITHUB_PERSONAL_ACCESS_TOKEN')
-    try:
-        token = token or getattr(settings, 'GITHUB_PERSONAL_ACCESS_TOKEN', None)
-    except Exception:
-        pass
-
-    headers = {'Accept': 'application/vnd.github+json'}
-    if token:
-        headers['Authorization'] = f'Bearer {token}'
-
-    url = f'https://api.github.com/repos/{owner}/{repo}/issues'
-    params = {'state': state, 'per_page': per_page, 'page': 1}
-    response = requests.get(url, headers=headers, params=params, timeout=30)
-    response.raise_for_status()
-
-    issues = response.json()
-    return [
-        {
-            'title': item.get('title'),
-            'html_url': item.get('html_url'),
-            'state': item.get('state'),
-            'number': item.get('number'),
-            'user': item.get('user', {}).get('login') if isinstance(item.get('user'), dict) else None,
-            'created_at': item.get('created_at'),
-        }
-        for item in issues
-        if item.get('pull_request') is None
-    ]
-
-def get_repository_pull_requests(owner: str, repo: str, state: str = "open", per_page: int = 5) -> list[dict[str, Any]]:
-    """Return pull requests for a repo using the GitHub REST API."""
-    token = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
-    try:
-        token = token or getattr(settings, "GITHUB_PERSONAL_ACCESS_TOKEN", None)
-    except Exception:
-        token = None
-
-    if not token:
-        return []
-
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github+json",
-    }
-
-    url = f"https://api.github.com/repos/{owner}/{repo}/pulls"
-    params = {"state": state, "per_page": per_page}
-
-    try:
-        response = requests.get(url, headers=headers, params=params, timeout=20)
-        response.raise_for_status()
-        items = response.json() or []
-    except requests.RequestException:
-        return []
-
-    return [
-        {
-            "title": item.get("title"),
-            "html_url": item.get("html_url"),
-            "state": item.get("state"),
-            "number": item.get("number"),
-            "user": item.get("user", {}).get("login") if isinstance(item.get("user"), dict) else None,
-            "created_at": item.get("created_at"),
-        }
-        for item in items
-    ]    
-# def mcp_tool(command_args: list[str]) -> dict | list | str | None:
-#     """
-#     Executes mcpcurl with the given command arguments and returns the JSON response.
-#     """
-#     ...

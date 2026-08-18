@@ -1,7 +1,7 @@
 import json
 from crewai.tools import tool
 
-from ..utils import mcp_tool
+from mcp_manager.utils import mcp_tool
 
 
 @tool("get_repo_files")
