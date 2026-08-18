@@ -66,9 +66,10 @@ def convert_markdown_to_html(markdown_file_path):
         return None
 
 
-# TODO: Write the function to render the documentation interface
+# function to render the documentation interface
 
-
+def documentation_interface(request):
+    return render(request, 'mcp_manager/documentation_interface.html')
 
 # TODO: Define the generate_documentation() function
 
