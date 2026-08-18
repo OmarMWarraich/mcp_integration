@@ -1,23 +1,16 @@
-# Custom Tool to Analyze a Repository’s Structure
+import json
 
-from langchain_core.tools import StructuredTool
-from mcp_manager.utils import mcp_tool
+from crewai.tools import tool
 
-def list_repo_files(owner: str, repo: str, path: str = ".") -> list:
-    """
-    List files and folders at a given path in a GitHub repository.
-    """
-    print(f"Repo Structure Lister: Get files at {path} for {owner}/{repo}")
-    result = mcp_tool([
-        "tools", "get_file_contents",
-        "--owner", owner,
-        "--repo", repo,
-        "--path", path
-    ])
-    return result if isinstance(result, list) else []
+from ..utils import get_repository_tree
 
-get_repo_files = StructuredTool.from_function(
-    name="get_repo_files",
-    func=list_repo_files,
-    description="List files and folders at a given path in a GitHub repository using the MCP server"
-)
+
+@tool("get_repo_files")
+def get_repo_files(owner: str, repo: str, path: str = ".") -> str:
+    """List files and folders at a given path in a GitHub repository."""
+    try:
+        result = get_repository_tree(owner, repo, path)
+    except Exception as exc:
+        return f"Error retrieving repository structure: {exc}"
+
+    return json.dumps(result, ensure_ascii=False) if isinstance(result, (dict, list)) else str(result)

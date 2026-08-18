@@ -1,0 +1,88 @@
+# next15-nft-marketplace Repository Structure
+
+- [.vscode](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/.vscode)/
+- [actions](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/actions)/
+  - [login.ts](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/actions/login.ts)
+- [app](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/app)/
+  - [create-nft](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/app/create-nft)/
+    - [page.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/app/create-nft/page.tsx)
+  - [created-nfts](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/app/created-nfts)/
+    - [page.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/app/created-nfts/page.tsx)
+  - [my-nfts](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/app/my-nfts)/
+    - [page.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/app/my-nfts/page.tsx)
+  - [nft-details](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/app/nft-details)/
+    - [page.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/app/nft-details/page.tsx)
+  - [resell-nft](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/app/resell-nft)/
+    - [page.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/app/resell-nft/page.tsx)
+  - [favicon.ico](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/app/favicon.ico)
+  - [globals.css](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/app/globals.css)
+  - [layout.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/app/layout.tsx)
+  - [page.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/app/page.tsx)
+- [components](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/components)/
+  - [Account.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/components/Account.tsx)
+  - [Banner.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/components/Banner.tsx)
+  - [CreatorCard.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/components/CreatorCard.tsx)
+  - [Dashboard.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/components/Dashboard.tsx)
+  - [Footer.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/components/Footer.tsx)
+  - [Input.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/components/Input.tsx)
+  - [Loader.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/components/Loader.tsx)
+  - [NFTCard.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/components/NFTCard.tsx)
+  - [Navbar.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/components/Navbar.tsx)
+  - [ThirdwebConnect.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/components/ThirdwebConnect.tsx)
+  - [Wallet.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/components/Wallet.tsx)
+  - [navbar](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/components/navbar)/
+    - [Theme.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/components/navbar/Theme.tsx)
+  - [ui](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/components/ui)/
+    - [button.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/components/ui/button.tsx)
+    - [card.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/components/ui/card.tsx)
+    - [carousel.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/components/ui/carousel.tsx)
+    - [dropdown-menu.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/components/ui/dropdown-menu.tsx)
+- [config](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/config)/
+  - [index.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/config/index.tsx)
+- [context](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/context)/
+  - [NFTMarketplaceModule#NFTMarketplace.json](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/context/NFTMarketplaceModule#NFTMarketplace.json)
+  - [Theme.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/context/Theme.tsx)
+  - [constants.ts](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/context/constants.ts)
+  - [index.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/context/index.tsx)
+- [contracts](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/contracts)/
+  - [Lock.sol](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/contracts/Lock.sol)
+  - [NFTMarketplace.sol](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/contracts/NFTMarketplace.sol)
+- [eslint.config.mjs](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/eslint.config.mjs)
+- [hardhat.config.ts](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/hardhat.config.ts)
+- [ignition](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/ignition)/
+  - [deployments](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/ignition/deployments)/
+    - [chain-1337](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/ignition/deployments/chain-1337)/
+      - [artifacts](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/ignition/deployments/chain-1337/artifacts)/
+        - [NFTMarketplaceModule#NFTMarketplace.dbg.json](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/ignition/deployments/chain-1337/artifacts/NFTMarketplaceModule#NFTMarketplace.dbg.json)
+      - [build-info](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/ignition/deployments/chain-1337/build-info)/
+        - [fca8376c2c080a53ea77a9c3cec44789.json](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/ignition/deployments/chain-1337/build-info/fca8376c2c080a53ea77a9c3cec44789.json)
+      - [deployed_addresses.json](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/ignition/deployments/chain-1337/deployed_addresses.json)
+      - [journal.jsonl](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/ignition/deployments/chain-1337/journal.jsonl)
+  - [modules](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/ignition/modules)/
+    - [NFTMarketplace.ts](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/ignition/modules/NFTMarketplace.ts)
+- [lib](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/lib)/
+  - [ThirdwebProvider.tsx](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/lib/ThirdwebProvider.tsx)
+  - [client.ts](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/lib/client.ts)
+  - [utils.ts](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/lib/utils.ts)
+- [next.config.ts](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/next.config.ts)
+- [package-lock.json](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/package-lock.json)
+- [package.json](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/package.json)
+- [postcss.config.mjs](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/postcss.config.mjs)
+- [public](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/public)/
+  - [assets](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/public/assets)/
+  - [file.svg](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/public/file.svg)
+  - [globe.svg](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/public/globe.svg)
+  - [next.svg](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/public/next.svg)
+  - [vercel.svg](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/public/vercel.svg)
+  - [window.svg](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/public/window.svg)
+- [tailwind.config.ts](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/tailwind.config.ts)
+- [test](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/test)/
+  - [Lock.ts](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/test/Lock.ts)
+- [tsconfig.json](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/tsconfig.json)
+- [utils](https://github.com/OmarMWarraich/next15-nft-marketplace/tree/main/utils)/
+  - [getTopCreators.ts](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/utils/getTopCreators.ts)
+  - [makeId.ts](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/utils/makeId.ts)
+  - [shortenAddress.ts](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/utils/shortenAddress.ts)
+- [.gitignore](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/.gitignore) (significant - typical to exclude but included for visibility)
+- [LICENSE.md](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/LICENSE.md)
+- [README.md](https://github.com/OmarMWarraich/next15-nft-marketplace/blob/main/README.md)
