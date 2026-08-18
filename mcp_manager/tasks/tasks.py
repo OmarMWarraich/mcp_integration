@@ -1,6 +1,7 @@
 from crewai import Task
-from ..agents.agents import repo_structure_auditor
+from ..agents.agents import repo_structure_auditor, issue_analyst
 from ..tools.directory_scanner import get_repo_files
+from ..tools.issue_retriever import get_issue
 
 # Analyze Repository
 def analyze_repo_structure_task(owner: str, repo: str):
@@ -24,3 +25,25 @@ def analyze_repo_structure_task(owner: str, repo: str):
             verbose = True # type: ignore
         )
     ]
+
+# Analyze GitHub Issues
+def get_issue_tasks(owner: str, repo: str):
+    fetch_issue_task = Task(
+        description = (
+            f"Use the 'get_issue' tool to fetch a list of all open issues from the {owner}/{repo} repository. "
+            "Once you have the data, analyze it to identify key themes, active discussions, and possible blockers. "
+            "Summarize the issues in Markdown format. Provide helpful insights, and recommend which issue should be prioritized and why."
+        ),
+        expected_output = (
+            "A Markdown-formatted report containing:\n"
+            "- A list of the most relevant open issues (title + URL)\n"
+            "- Grouping or categorization of the issues if patterns exist\n"
+            "- A short analysis or recommendation on which issue should be tackled first"
+        ),
+        agent = issue_analyst,
+        tools = [get_issue],
+        output_file = "/generated_docs/report_issues.md",
+        create_directory = True,
+        verbose = True # type: ignore
+    )
+    return [fetch_issue_task]

@@ -108,6 +108,38 @@ def get_repository_tree(owner: str, repo: str, path: str = ".") -> list[dict]:
     return items
 
 
+def get_repository_issues(owner: str, repo: str, state: str = 'open', per_page: int = 5) -> list[dict]:
+    """Return open issues for a repo using the GitHub REST API."""
+    token = os.getenv('GITHUB_PERSONAL_ACCESS_TOKEN')
+    try:
+        token = token or getattr(settings, 'GITHUB_PERSONAL_ACCESS_TOKEN', None)
+    except Exception:
+        pass
+
+    headers = {'Accept': 'application/vnd.github+json'}
+    if token:
+        headers['Authorization'] = f'Bearer {token}'
+
+    url = f'https://api.github.com/repos/{owner}/{repo}/issues'
+    params = {'state': state, 'per_page': per_page, 'page': 1}
+    response = requests.get(url, headers=headers, params=params, timeout=30)
+    response.raise_for_status()
+
+    issues = response.json()
+    return [
+        {
+            'title': item.get('title'),
+            'html_url': item.get('html_url'),
+            'state': item.get('state'),
+            'number': item.get('number'),
+            'user': item.get('user', {}).get('login') if isinstance(item.get('user'), dict) else None,
+            'created_at': item.get('created_at'),
+        }
+        for item in issues
+        if item.get('pull_request') is None
+    ]
+
+
 # def mcp_tool(command_args: list[str]) -> dict | list | str | None:
 #     """
 #     Executes mcpcurl with the given command arguments and returns the JSON response.
