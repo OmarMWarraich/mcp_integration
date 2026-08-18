@@ -1,6 +1,7 @@
 from crewai import Agent
 from ..tools.directory_scanner import get_repo_files
 from ..tools.issue_retriever import get_issue
+from ..tools.pull_request_lister import get_pull_requests
 
 ## Repository Structure Analyzer
 repo_structure_auditor = Agent(
@@ -23,5 +24,17 @@ issue_analyst = Agent(
         "You know how to summarize them effectively and highlight the ones that need urgent attention."
     ),
     tools = [get_issue],
+    verbose = True
+)
+
+## Pull Requests Fetcher and Reporter
+pull_requests_fetcher_reporter = Agent(
+    role = "Pull Requests Fetcher and Reporter",
+    goal = "Fetch and summarize the most recent pull requests for a GitHub repository.",
+    backstory = (
+        "You are a skilled developer who can analyze pull requests and provide concise summaries. "
+        "You can identify key themes, active discussions, and potential areas of focus for the development team."
+    ),
+    tools = [get_pull_requests],
     verbose = True
 )

@@ -2,6 +2,7 @@
 import json
 import os
 import subprocess
+from typing import Any
 
 import requests
 from django.conf import settings
@@ -139,6 +140,43 @@ def get_repository_issues(owner: str, repo: str, state: str = 'open', per_page: 
         if item.get('pull_request') is None
     ]
 
+def get_repository_pull_requests(owner: str, repo: str, state: str = "open", per_page: int = 5) -> list[dict[str, Any]]:
+    """Return pull requests for a repo using the GitHub REST API."""
+    token = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
+    try:
+        token = token or getattr(settings, "GITHUB_PERSONAL_ACCESS_TOKEN", None)
+    except Exception:
+        token = None
+
+    if not token:
+        return []
+
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github+json",
+    }
+
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls"
+    params = {"state": state, "per_page": per_page}
+
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=20)
+        response.raise_for_status()
+        items = response.json() or []
+    except requests.RequestException:
+        return []
+
+    return [
+        {
+            "title": item.get("title"),
+            "html_url": item.get("html_url"),
+            "state": item.get("state"),
+            "number": item.get("number"),
+            "user": item.get("user", {}).get("login") if isinstance(item.get("user"), dict) else None,
+            "created_at": item.get("created_at"),
+        }
+        for item in items
+    ]    
 
 # def mcp_tool(command_args: list[str]) -> dict | list | str | None:
 #     """

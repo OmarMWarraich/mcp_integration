@@ -1,7 +1,8 @@
 from crewai import Task
-from ..agents.agents import repo_structure_auditor, issue_analyst
+from ..agents.agents import repo_structure_auditor, issue_analyst, pull_requests_fetcher_reporter
 from ..tools.directory_scanner import get_repo_files
 from ..tools.issue_retriever import get_issue
+from ..tools.pull_request_lister import get_pull_requests
 
 # Analyze Repository
 def analyze_repo_structure_task(owner: str, repo: str):
@@ -47,3 +48,15 @@ def get_issue_tasks(owner: str, repo: str):
         verbose = True # type: ignore
     )
     return [fetch_issue_task]
+
+def list_pull_requests_tasks(owner: str, repo: str):
+    fetch_pull_request_task = Task(
+        description = f"Fetch a list of 5 most recently created pull requests for the {owner}/{repo} repository using the 'get_pull_requests' tool. Analyze the provided lists to identify key themes, active discussions, and potential areas of focus.",
+        expected_output = f"A Markdown-formatted summary of the repository's pull requests. Provide a concise and categorical summary of the requests and your feedback for it.",
+        agent = pull_requests_fetcher_reporter,
+        tools = [get_pull_requests],
+        output_file = "/generated_docs/pull_requests.md",
+        create_directory = True,
+        verbose = True # type: ignore
+    )
+    return [fetch_pull_request_task] 
