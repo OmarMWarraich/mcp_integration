@@ -2,6 +2,7 @@ from crewai import Agent
 from ..tools.directory_scanner import get_repo_files
 from ..tools.issue_retriever import get_issue
 from ..tools.pull_request_lister import get_pull_requests
+from ..tools.branch_lister import get_branches
 
 ## Repository Structure Analyzer
 repo_structure_auditor = Agent(
@@ -36,5 +37,17 @@ pull_requests_fetcher_reporter = Agent(
         "You can identify key themes, active discussions, and potential areas of focus for the development team."
     ),
     tools = [get_pull_requests],
+    verbose = True
+)
+
+## Branches Fetcher and Reporter
+branches_fetcher_reporter = Agent(
+    role = "Branches Fetcher and Reporter",
+    goal = "Fetch and summarize all branches for a GitHub repository.",
+    backstory = (
+        "You are a skilled developer who can analyze branches and provide concise summaries. "
+        "You can identify key themes, active discussions, and potential areas of focus for the development team."
+    ),
+    tools = [get_branches],
     verbose = True
 )

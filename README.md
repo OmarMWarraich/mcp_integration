@@ -25,7 +25,7 @@ A Django + CrewAI application that analyzes GitHub repositories using the **GitH
 
 This project combines Django as the web orchestration layer with CrewAI agents that use GitHub MCP tools directly. Instead of hand-written REST calls to the GitHub API, every read operation goes through the official GitHub MCP Server using the generated `mcpcurl` CLI contract. This ensures the tools stay aligned with the live MCP schema and avoids drift from manual API bindings.
 
-The current workflow accepts a GitHub repository URL, runs three CrewAI tasks sequentially, and produces a combined Markdown summary rendered as HTML.
+The current workflow accepts a GitHub repository URL, runs four CrewAI tasks sequentially, and produces a combined Markdown summary rendered as HTML.
 
 ---
 
@@ -34,10 +34,11 @@ The current workflow accepts a GitHub repository URL, runs three CrewAI tasks se
 ### Existing
 
 - **Django web interface** for submitting a GitHub repository URL and viewing generated documentation.
-- **CrewAI agent crew** with three specialized agents:
+- **CrewAI agent crew** with four specialized agents:
   - `repo_structure_auditor` — lists repository files via MCP `get_file_contents`.
   - `issue_analyst` — fetches open issues via MCP `list_issues`.
   - `pull_requests_fetcher_reporter` — fetches open pull requests via MCP `list_pull_requests`.
+  - `branch_reporter` — fetches repository branches via MCP `list_branches`.
 - **MCP-first tool execution** through a centralized `mcp_tool()` helper in `mcp_manager/utils.py`.
 - **Dynamic CLI flag generation** from argument dictionaries so wrappers match the generated `mcpcurl` tool schema.
 - **Read-only mode support** for MCP toolsets that include write tools with incompatible schemas (e.g. `issues`).
@@ -46,7 +47,7 @@ The current workflow accepts a GitHub repository URL, runs three CrewAI tasks se
 
 ### Coming Soon
 
-- Branch listing and commit history reports.
+- Commit history reports.
 - Code search and security advisory summaries.
 - Persistent storage of generated documents with the existing `GeneratedDocument` model.
 - REST API endpoint for headless execution.
@@ -85,6 +86,7 @@ Key files:
 - [mcp_manager/tools/directory_scanner.py](mcp_manager/tools/directory_scanner.py) — `get_repo_files` tool.
 - [mcp_manager/tools/issue_retriever.py](mcp_manager/tools/issue_retriever.py) — `get_issue` tool.
 - [mcp_manager/tools/pull_request_lister.py](mcp_manager/tools/pull_request_lister.py) — `get_pull_requests` tool.
+- [mcp_manager/tools/branch_lister.py](mcp_manager/tools/branch_lister.py) — `get_branches` tool.
 - [mcp_manager/agents/agents.py](mcp_manager/agents/agents.py) — agent definitions.
 - [mcp_manager/tasks/tasks.py](mcp_manager/tasks/tasks.py) — task definitions.
 - [mcp_manager/crews/crew.py](mcp_manager/crews/crew.py) — crew assembly.
@@ -242,6 +244,7 @@ The test suite covers:
 - Default and custom toolset selection
 - `read_only` flag injection
 - Issue wrapper schema contract
+- Branch wrapper schema contract
 
 Run all tests:
 

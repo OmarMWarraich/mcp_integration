@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from mcp_manager.tools import issue_retriever
+from mcp_manager.tools import branch_lister, issue_retriever
 from mcp_manager.utils import mcp_tool
 
 
@@ -64,6 +64,20 @@ class McpToolTests(TestCase):
 
         server_cmd = mock_popen.call_args.args[0][2]
         self.assertIn("--toolsets issues --read-only stdio", server_cmd)
+
+    @patch("mcp_manager.tools.branch_lister.mcp_tool")
+    def test_get_branches_uses_repos_toolset(self, mock_mcp_tool):
+        mock_mcp_tool.return_value = [{"name": "main"}]
+
+        result = branch_lister.get_branches.run(owner="github", repo="github-mcp-server")
+
+        self.assertEqual(result, [{"name": "main"}])
+        mock_mcp_tool.assert_called_once_with(
+            "list_branches",
+            {"owner": "github", "repo": "github-mcp-server"},
+            toolsets="repos",
+            read_only=True,
+        )
 
     @patch("mcp_manager.tools.issue_retriever.mcp_tool")
     def test_get_issue_uses_list_issues_schema(self, mock_mcp_tool):
