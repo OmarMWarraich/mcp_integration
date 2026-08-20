@@ -101,5 +101,17 @@
         <button type="submit">Generate Documentation</button>
     </form>
     <hr>
+
+    {% if documentation %}
+        <h2>
+            Latest Report
+            {% if repository %}
+                for {{ repository.owner }}/{{ repository.name }}
+            {% endif %}
+        </h2>
+        <div>
+            {{ documentation|safe }}
+        </div>
+    {% endif %}
 </body>
 </html>
