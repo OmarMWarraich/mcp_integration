@@ -133,6 +133,55 @@ def documentation_interface(request):
     return render(request, 'mcp_manager/documentation_interface.html', context)
 
 
+@require_http_methods(["POST"])
+def generate_documentation_multiple(request):
+    """Parse multiple GitHub URLs from textarea and dispatch a Celery batch task."""
+    urls_text = request.POST.get("repo_urls", "").strip()
+    if not urls_text:
+        return render(
+            request,
+            "mcp_manager/documentation_interface.html",
+            {"error": "Please provide at least one repository URL."},
+        )
+
+    repos = []
+    errors = []
+    for line in urls_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            owner, repo_name = extract_owner_repo(line)
+            repos.append({"owner": owner, "repo": repo_name})
+        except ValueError as e:
+            errors.append(f"{line}: {e}")
+
+    if errors:
+        return render(
+            request,
+            "mcp_manager/documentation_interface.html",
+            {"error": "Invalid URL(s): " + "; ".join(errors)},
+        )
+
+    if not repos:
+        return render(
+            request,
+            "mcp_manager/documentation_interface.html",
+            {"error": "No valid repository URLs found."},
+        )
+
+    task = run_multiple_crews_task.delay(repos)  # type: ignore
+    return render(
+        request,
+        "mcp_manager/documentation_interface.html",
+        {
+            "batch_task_id": task.id,
+            "repos_submitted": repos,
+            "task_status": "PENDING",
+        },
+    )
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def run_crew(request):
