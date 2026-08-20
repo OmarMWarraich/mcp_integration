@@ -6,7 +6,6 @@ from django.shortcuts import render, redirect
 from django.conf import settings
 from django.urls import reverse
 from django.http import HttpResponseRedirect, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from langchain_openai import ChatOpenAI
 from .crews.crew import build_crew
@@ -182,7 +181,6 @@ def generate_documentation_multiple(request):
     )
 
 
-@csrf_exempt
 @require_http_methods(["POST"])
 def run_crew(request):
     """Trigger an async crew run and return the Celery task ID.
