@@ -64,37 +64,110 @@ The current workflow accepts a GitHub repository URL, runs four CrewAI tasks seq
 ## Architecture
 
 ```text
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────────┐
-│  Django Web UI  │────▶│  CrewAI Process  │────▶│  MCP Tool Wrappers  │
-└─────────────────┘     └──────────────────┘     └─────────────────────┘
-                                                         │
-                                                         ▼
-                                                  ┌──────────────┐
-                                                  │   mcpcurl    │
-                                                  └──────────────┘
-                                                         │
-                                                         ▼
-                                                ┌──────────────────┐
-                                                │ GitHub MCP Server │
-                                                │   (stdio/spawn)  │
-                                                └──────────────────┘
-                                                         │
-                                                         ▼
-                                                  ┌─────────────┐
-                                                  │ GitHub API  │
-                                                  └─────────────┘
+                         ┌─────────────────────────────────────┐
+                         │         Clients / Users             │
+                         │  • Django Web UI (browser)          │
+                         │  • REST API clients (curl/scripts)  │
+                         └──────────────┬──────────────────────┘
+                                        │
+                                        ▼
+                         ┌─────────────────────────────────────┐
+                         │           Django Layer              │
+                         │  • mcp_manager/views.py             │
+                         │    - POST /run-crew/                │
+                         │    - GET  /crew-status/<id>/        │
+                         │  • Django admin & web templates     │
+                         └──────────────┬──────────────────────┘
+                                        │ enqueue / poll
+                                        ▼
+                         ┌─────────────────────────────────────┐
+                         │      Celery Distributed Queue       │
+                         │                                     │
+                         │   ┌──────────┐      ┌──────────┐   │
+                         │   │ RabbitMQ │      │  Redis   │   │
+                         │   │  broker  │      │  result  │   │
+                         │   │ :5672    │      │ backend  │   │
+                         │   └────┬─────┘      │ :6379    │   │
+                         │        │            └────┬─────┘   │
+                         │        └─────────────────┘           │
+                         │                  │                    │
+                         └──────────────────┼────────────────────┘
+                                            │
+                                            ▼
+                         ┌─────────────────────────────────────┐
+                         │         Celery Worker               │
+                         │  • run_crew_task                    │
+                         │  • run_multiple_crews_task          │
+                         │  • run_scheduled_crew_task          │
+                         │        │                            │
+                         │        ▼                            │
+                         │  ┌──────────────────────┐           │
+                         │  │   CrewAI Process     │           │
+                         │  │  • build_crew()      │           │
+                         │  │  • agents & tasks    │           │
+                         │  └──────────┬───────────┘           │
+                         │             │                       │
+                         │             ▼                       │
+                         │  ┌──────────────────────┐           │
+                         │  │   MCP Tool Wrappers  │           │
+                         │  │  • directory_scanner │           │
+                         │  │  • issue_retriever   │           │
+                         │  │  • pull_request_...  │           │
+                         │  │  • branch_lister     │           │
+                         │  └──────────┬───────────┘           │
+                         │             │                       │
+                         └─────────────┼───────────────────────┘
+                                       ▼
+                         ┌─────────────────────────────────────┐
+                         │   Infrastructure (Docker Compose)   │
+                         │  ┌──────────────┐ ┌──────────────┐  │
+                         │  │  PostgreSQL  │ │    Redis     │  │
+                         │  │   :5432      │ │   :6379      │  │
+                         │  │  persistent  │ │  transient   │  │
+                         │  │  task/Django │ │  results     │  │
+                         │  └──────────────┘ └──────────────┘  │
+                         │  ┌────────────────────────────────┐ │
+                         │  │  RabbitMQ :5672 / :15672       │ │
+                         │  │  Celery broker / management UI │ │
+                         │  └────────────────────────────────┘ │
+                         └─────────────────────────────────────┘
+                                       │
+                                       ▼
+                         ┌─────────────────────────────────────┐
+                         │       GitHub MCP Server Runtime     │
+                         │         • mcpcurl CLI               │
+                         │         • stdio subprocess          │
+                         └──────────────┬──────────────────────┘
+                                        │
+                                        ▼
+                         ┌─────────────────────────────────────┐
+                         │           GitHub API                │
+                         └─────────────────────────────────────┘
 ```
 
-Key files:
+### Request flow
 
-- [mcp_manager/utils.py](mcp_manager/utils.py) — central `mcp_tool()` helper.
-- [mcp_manager/tools/directory_scanner.py](mcp_manager/tools/directory_scanner.py) — `get_repo_files` tool.
-- [mcp_manager/tools/issue_retriever.py](mcp_manager/tools/issue_retriever.py) — `get_issue` tool.
-- [mcp_manager/tools/pull_request_lister.py](mcp_manager/tools/pull_request_lister.py) — `get_pull_requests` tool.
-- [mcp_manager/tools/branch_lister.py](mcp_manager/tools/branch_lister.py) — `get_branches` tool.
-- [mcp_manager/agents/agents.py](mcp_manager/agents/agents.py) — agent definitions.
-- [mcp_manager/tasks/tasks.py](mcp_manager/tasks/tasks.py) — task definitions.
+1. A user submits a repo via the Django web UI or a `POST /run-crew/` API call.
+2. The Django view validates the payload and enqueues a Celery task on RabbitMQ.
+3. The Celery worker picks up the task, builds the CrewAI crew, and executes agents.
+4. Agents invoke MCP tool wrappers, which spawn `mcpcurl` and the GitHub MCP Server.
+5. Task results are written to Redis and exposed through `GET /crew-status/<task_id>/`.
+6. PostgreSQL stores Django state, sessions, and future persistent report models.
+
+### Key files
+
+- [mcp_manager/views.py](mcp_manager/views.py) — Django API endpoints.
+- [mcp_manager/tasks/celery_tasks.py](mcp_manager/tasks/celery_tasks.py) — async Celery task definitions.
+- [mcp_integration/celery.py](mcp_integration/celery.py) — Celery app bootstrap.
+- [mcp_integration/settings.py](mcp_integration/settings.py) — broker/backend configuration.
 - [mcp_manager/crews/crew.py](mcp_manager/crews/crew.py) — crew assembly.
+- [mcp_manager/agents/agents.py](mcp_manager/agents/agents.py) — agent definitions.
+- [mcp_manager/tasks/tasks.py](mcp_manager/tasks/tasks.py) — CrewAI task definitions.
+- [mcp_manager/utils.py](mcp_manager/utils.py) — central `mcp_tool()` helper.
+- [mcp_manager/tools/directory_scanner.py](mcp_manager/tools/directory_scanner.py) — repo file tool.
+- [mcp_manager/tools/issue_retriever.py](mcp_manager/tools/issue_retriever.py) — issues tool.
+- [mcp_manager/tools/pull_request_lister.py](mcp_manager/tools/pull_request_lister.py) — PR tool.
+- [mcp_manager/tools/branch_lister.py](mcp_manager/tools/branch_lister.py) — branches tool.
 
 ---
 
