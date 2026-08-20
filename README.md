@@ -638,6 +638,117 @@ Check the printed command in the terminal and run it manually to see the raw ser
 
 Ensure `.env` exists at the project root and contains `GITHUB_MCP_SERVER=/absolute/path/to/github-mcp-server`.
 
+### PostgreSQL: `database "mcp_integration" does not exist`
+
+Create the database inside the running container:
+
+```bash
+docker exec mcp_integration_db psql -U postgres -c "CREATE DATABASE mcp_integration;"
+```
+
+Then re-run migrations:
+
+```bash
+python manage.py migrate
+```
+
+### PostgreSQL: `could not connect to server: Connection refused`
+
+1. Confirm the container is running:
+
+   ```bash
+   docker compose ps
+   ```
+
+2. Verify `DB_HOST=localhost` and `DB_PORT=5432` in `.env`.
+3. Make sure no other PostgreSQL instance is bound to port 5432:
+
+   ```bash
+   lsof -i :5432
+   brew services stop postgresql
+   ```
+
+### DB locks / slow writes / `database is locked`
+
+This is the classic symptom of running SQLite under concurrency. The project now uses PostgreSQL to avoid this. If you still see `database is locked`, verify your `DATABASES` setting in `mcp_integration/settings.py` points to PostgreSQL, not SQLite.
+
+If locks occur in PostgreSQL:
+
+- Look for long-running transactions in the worker logs.
+- Restart stuck workers.
+- Consider lowering Celery task visibility timeout if tasks are being redelivered:
+
+  ```python
+  CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 43200}
+  ```
+
+### RabbitMQ / broker connection issues
+
+Symptoms include:
+
+- `amqp.exceptions.AccessRefused`
+- `Connection refused` from Celery
+- Worker starts but shows `Connected to amqp://guest:**@127.0.0.1:5672//` instead of your configured broker
+
+Fix:
+
+1. Confirm RabbitMQ is running:
+
+   ```bash
+   docker exec mcp_integration_rabbitmq rabbitmq-diagnostics ping
+   ```
+
+2. Check that `BROKER_URL` in `.env` matches the RabbitMQ credentials:
+
+   ```env
+   BROKER_URL=amqp://user:pass@localhost:5672//
+   ```
+
+3. Stop any local RabbitMQ instance that may be shadowing the Docker port:
+
+   ```bash
+   brew services stop rabbitmq
+   ```
+
+4. Verify the management UI is reachable at [http://localhost:15672](http://localhost:15672).
+
+### Celery worker crashes or exits immediately
+
+Common causes and fixes:
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `ModuleNotFoundError` on startup | Worker started from wrong directory | Run from project root where `manage.py` lives. |
+| `AttributeError: 'Settings' object has no attribute '...'` | Missing env variable in `.env` | Ensure `.env` is loaded; run with `.venv/bin/python -m celery ...` if needed. |
+| Worker consumes memory until killed | CrewAI output is large; no result size limits | Use `--max-tasks-per-child=50` to recycle workers. |
+| `Received unregistered task` | Celery did not autodiscover tasks | Restart worker; check `celery -A mcp_integration inspect registered`. |
+| Tasks stay in `PENDING` | No worker is running, or worker is connected to a different broker | Start a worker and confirm broker URL. |
+| Worker dies with `OperationalError` | Cannot reach PostgreSQL, Redis, or RabbitMQ | Verify all Docker services are healthy (`docker compose ps`). |
+
+### Redis result backend errors
+
+If task statuses never progress from `PENDING`:
+
+1. Confirm Redis is running:
+
+   ```bash
+   docker exec mcp_integration_redis redis-cli ping
+   # expected: PONG
+   ```
+
+2. Verify `CELERY_RESULT_BACKEND=redis://localhost:6379/0` in `.env`.
+3. Make sure no other Redis instance is on port 6379:
+
+   ```bash
+   lsof -i :6379
+   ```
+
+### Worker logs show tasks but no output appears
+
+- Check that the worker and the Django app share the same `BROKER_URL` and `CELERY_RESULT_BACKEND` values.
+- Look for `Process exited with '1'` in the worker log, which often means the task raised an exception. Inspect the traceback and fix the underlying issue.
+- Ensure `GITHUB_MCP_SERVER` and `GITHUB_PERSONAL_ACCESS_TOKEN` are set in the worker's environment, not just the Django server environment.
+
 ---
 
 ## Coming Next
