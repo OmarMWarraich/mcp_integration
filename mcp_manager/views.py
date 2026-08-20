@@ -180,9 +180,18 @@ def crew_status(request, task_id: str):
     }
 
     if result.status == "SUCCESS":
-        response["result"] = result.result
+        payload = result.result
+        if isinstance(payload, dict):
+            response["result"] = payload
+        else:
+            response["result"] = {"raw_output": str(payload)}
     elif result.status == "FAILURE":
-        response["error"] = str(result.result)
+        exc = result.result
+        if isinstance(exc, Exception):
+            response["error"] = type(exc).__name__
+            response["message"] = str(exc)
+        else:
+            response["error"] = str(exc)
 
     return JsonResponse(response)
 
