@@ -373,6 +373,37 @@ You should see:
 | `run_crew_task` | Run the analysis crew for a single repository. |
 | `run_multiple_crews_task` | Run crews for many repositories concurrently using a Celery group. |
 | `run_scheduled_crew_task` | Dedicated entry point for Celery Beat scheduled runs. |
+| `validate_crew_payload` | Pre-flight validation for batch payloads. |
+
+### Result payload
+
+Successful crew tasks return a structured JSON-serializable payload:
+
+```json
+{
+  "task_id": "a1b2c3d4-...",
+  "owner": "github",
+  "repo": "github-mcp-server",
+  "status": "SUCCESS",
+  "raw_output": "...",
+  "serialized_at": 1692432000.0
+}
+```
+
+On failure, the payload contains:
+
+```json
+{
+  "task_id": "a1b2c3d4-...",
+  "owner": "github",
+  "repo": "github-mcp-server",
+  "status": "FAILURE",
+  "error": "ExceptionName",
+  "message": "..."
+}
+```
+
+Each task is retried up to three times with exponential backoff before a failure is recorded.
 
 ---
 
