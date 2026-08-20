@@ -15,6 +15,7 @@ A Django + CrewAI application that analyzes GitHub repositories using the **GitH
 - [RabbitMQ Setup](#rabbitmq-setup)
 - [PostgreSQL Migration](#postgresql-migration)
 - [Celery Result Backend](#celery-result-backend)
+- [Celery Setup](#celery-setup)
 - [Running the Project](#running-the-project)
 - [Usage](#usage)
 - [MCP Tool Wrapper](#mcp-tool-wrapper)
@@ -178,7 +179,7 @@ DB_HOST=localhost
 DB_PORT=5432
 
 # Celery
-BROKER_URL=amqp://user:pass@rabbitmq:5672//
+BROKER_URL=amqp://user:pass@localhost:5672//
 CELERY_RESULT_BACKEND=redis://localhost:6379/0
 ```
 
@@ -238,6 +239,16 @@ brew services start rabbitmq
 ```
 
 Then update `BROKER_URL` in `.env` to point to your local broker (e.g. `amqp://guest:guest@localhost:5672//`).
+
+> **Note:** The default `.env` uses `localhost` because RabbitMQ is exposed on the host. If you later run the Django app or Celery workers inside the Docker Compose network, change the host to `rabbitmq` (the service name).
+
+### Avoiding port conflicts
+
+If you have a local RabbitMQ instance already running on port 5672 (e.g. from Homebrew), stop it before starting the Docker container:
+
+```bash
+brew services stop rabbitmq
+```
 
 ---
 
@@ -308,6 +319,48 @@ CELERY_RESULT_BACKEND=redis://localhost:6379/0
 - Fast, in-memory storage for transient task metadata.
 - Simple to run alongside RabbitMQ in Docker Compose.
 - Can be swapped for PostgreSQL later if persistence requirements change.
+
+---
+
+## Celery Setup
+
+Celery is integrated with Django using RabbitMQ as the broker and Redis as the result backend.
+
+Key files:
+
+- [mcp_integration/celery.py](mcp_integration/celery.py) — Celery app configuration.
+- [mcp_manager/tasks/celery_tasks.py](mcp_manager/tasks/celery_tasks.py) — async crew task definition.
+
+### Configuration
+
+Celery reads the following settings from `.env` via `mcp_integration/settings.py`:
+
+```env
+BROKER_URL=amqp://user:pass@localhost:5672//
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+```
+
+### Start a Celery worker
+
+Make sure RabbitMQ and Redis are running, then run:
+
+```bash
+celery -A mcp_integration worker --loglevel=info
+```
+
+For production-style deployments, you can tune concurrency:
+
+```bash
+celery -A mcp_integration worker --loglevel=info --concurrency=4
+```
+
+### Inspect registered tasks
+
+```bash
+celery -A mcp_integration inspect registered
+```
+
+You should see `mcp_manager.tasks.celery_tasks.run_crew_task` in the list.
 
 ---
 

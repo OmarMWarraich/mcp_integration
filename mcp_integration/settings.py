@@ -144,5 +144,5 @@ GITHUB_PERSONAL_ACCESS_TOKEN = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 # Celery broker and result backend
-BROKER_URL = os.getenv("BROKER_URL", "amqp://guest:guest@localhost:5672//")
+CELERY_BROKER_URL = os.getenv("BROKER_URL", "amqp://guest:guest@localhost:5672//")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
