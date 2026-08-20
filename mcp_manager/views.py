@@ -5,10 +5,13 @@ import markdown
 from django.shortcuts import render, redirect
 from django.conf import settings
 from django.urls import reverse
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 from langchain_openai import ChatOpenAI
 from .crews.crew import build_crew
 from .models import GitHubRepository, GeneratedDocument
+from .tasks.celery_tasks import run_crew_task, run_multiple_crews_task
 
 
 def generate_documentation(request):
@@ -129,7 +132,59 @@ def documentation_interface(request):
         context["repository"] = latest_document.repository
     return render(request, 'mcp_manager/documentation_interface.html', context)
 
-# TODO: Define the generate_documentation() function
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def run_crew(request):
+    """Trigger an async crew run and return the Celery task ID.
+
+    Expected JSON body for a single repo:
+        {"owner": "github", "repo": "github-mcp-server"}
+
+    Expected JSON body for multiple repos:
+        {"repos": [{"owner": "github", "repo": "github-mcp-server"}, ...]}
+    """
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON body."}, status=400)
+
+    if "repos" in body:
+        repos = body["repos"]
+        if not isinstance(repos, list) or not repos:
+            return JsonResponse({"error": "'repos' must be a non-empty list."}, status=400)
+        task = run_multiple_crews_task.delay(repos) # type: ignore
+    elif "owner" in body and "repo" in body:
+        owner = body["owner"]
+        repo_name = body["repo"]
+        task = run_crew_task.delay(owner=owner, repo=repo_name) # type: ignore
+    else:
+        return JsonResponse(
+            {"error": "Request must include either 'owner' and 'repo' or 'repos'."},
+            status=400,
+        )
+
+    return JsonResponse({"task_id": task.id, "status": "PENDING"}, status=202)
+
+
+@require_http_methods(["GET"])
+def crew_status(request, task_id: str):
+    """Return the status and result of a Celery task by ID.
+
+    Possible statuses: PENDING, STARTED, SUCCESS, FAILURE.
+    """
+    result = run_crew_task.AsyncResult(task_id) # type: ignore
+    response = {
+        "task_id": task_id,
+        "status": result.status,
+    }
+
+    if result.status == "SUCCESS":
+        response["result"] = result.result
+    elif result.status == "FAILURE":
+        response["error"] = str(result.result)
+
+    return JsonResponse(response)
 
 
 

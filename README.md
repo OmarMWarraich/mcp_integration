@@ -18,6 +18,7 @@ A Django + CrewAI application that analyzes GitHub repositories using the **GitH
 - [Celery Setup](#celery-setup)
 - [Running the Project](#running-the-project)
 - [Usage](#usage)
+- [API Endpoints](#api-endpoints)
 - [MCP Tool Wrapper](#mcp-tool-wrapper)
 - [Testing](#testing)
 - [Troubleshooting](#troubleshooting)
@@ -457,6 +458,73 @@ The crew will run and return a combined HTML report.
    print(result.status)  # PENDING / STARTED / SUCCESS / FAILURE
    print(result.result)  # payload once SUCCESS
    ```
+
+### Trigger via HTTP API
+
+Start the Django development server and Celery worker, then trigger a run:
+
+```bash
+curl -X POST http://127.0.0.1:8000/run-crew/ \
+  -H "Content-Type: application/json" \
+  -d '{"owner": "github", "repo": "github-mcp-server"}'
+```
+
+Response:
+
+```json
+{"task_id": "a1b2c3d4-...", "status": "PENDING"}
+```
+
+For multiple repos:
+
+```bash
+curl -X POST http://127.0.0.1:8000/run-crew/ \
+  -H "Content-Type: application/json" \
+  -d '{"repos": [{"owner": "github", "repo": "github-mcp-server"}, {"owner": "django", "repo": "django"}]}'
+```
+
+### Check task status via API
+
+```bash
+curl http://127.0.0.1:8000/crew-status/a1b2c3d4-.../
+```
+
+Possible statuses: `PENDING`, `STARTED`, `SUCCESS`, `FAILURE`.
+
+---
+
+## API Endpoints
+
+| Method | Endpoint | Body | Response |
+| --- | --- | --- | --- |
+| `POST` | `/run-crew/` | `{"owner": "...", "repo": "..."}` or `{"repos": [...]}` | `{"task_id": "...", "status": "PENDING"}` |
+| `GET` | `/crew-status/<task_id>/` | — | `{"task_id": "...", "status": "...", "result": {...}}` |
+
+### `POST /run-crew/`
+
+Trigger a single crew run:
+
+```bash
+curl -X POST http://127.0.0.1:8000/run-crew/ \
+  -H "Content-Type: application/json" \
+  -d '{"owner": "github", "repo": "github-mcp-server"}'
+```
+
+Trigger multiple crew runs concurrently:
+
+```bash
+curl -X POST http://127.0.0.1:8000/run-crew/ \
+  -H "Content-Type: application/json" \
+  -d '{"repos": [{"owner": "github", "repo": "github-mcp-server"}]}'
+```
+
+### `GET /crew-status/<task_id>/`
+
+Poll for the result of a previously triggered task:
+
+```bash
+curl http://127.0.0.1:8000/crew-status/a1b2c3d4-.../
+```
 
 ### Run multiple crews concurrently
 
