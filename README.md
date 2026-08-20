@@ -360,7 +360,19 @@ celery -A mcp_integration worker --loglevel=info --concurrency=4
 celery -A mcp_integration inspect registered
 ```
 
-You should see `mcp_manager.tasks.celery_tasks.run_crew_task` in the list.
+You should see:
+
+- `mcp_manager.tasks.celery_tasks.run_crew_task`
+- `mcp_manager.tasks.celery_tasks.run_multiple_crews_task`
+- `mcp_manager.tasks.celery_tasks.run_scheduled_crew_task`
+
+### Available tasks
+
+| Task | Purpose |
+| --- | --- |
+| `run_crew_task` | Run the analysis crew for a single repository. |
+| `run_multiple_crews_task` | Run crews for many repositories concurrently using a Celery group. |
+| `run_scheduled_crew_task` | Dedicated entry point for Celery Beat scheduled runs. |
 
 ---
 
@@ -383,6 +395,74 @@ The crew will run and return a combined HTML report.
 ---
 
 ## Usage
+
+### Async crew execution with Celery
+
+1. Make sure RabbitMQ and Redis are running:
+
+   ```bash
+   docker compose up -d
+   ```
+
+2. Start a Celery worker:
+
+   ```bash
+   celery -A mcp_integration worker --loglevel=info
+   ```
+
+3. Dispatch a task from a Django shell, view, or API:
+
+   ```python
+   from mcp_manager.tasks.celery_tasks import run_crew_task
+
+   task = run_crew_task.delay(owner="github", repo="github-mcp-server")
+   print(task.id)  # e.g. a1b2c3d4-...
+   ```
+
+4. Check the result:
+
+   ```python
+   result = run_crew_task.AsyncResult(task.id)
+   print(result.status)  # PENDING / STARTED / SUCCESS / FAILURE
+   print(result.result)  # payload once SUCCESS
+   ```
+
+### Run multiple crews concurrently
+
+```python
+from mcp_manager.tasks.celery_tasks import run_multiple_crews_task
+
+repos = [
+    {"owner": "github", "repo": "github-mcp-server"},
+    {"owner": "django", "repo": "django"},
+]
+task = run_multiple_crews_task.delay(repos)
+print(task.id)
+```
+
+### Scheduled crew execution with Celery Beat
+
+Add a Beat schedule entry in `mcp_integration/settings.py`:
+
+```python
+CELERY_BEAT_SCHEDULE = {
+    "analyze-github-mcp-server-hourly": {
+        "task": "mcp_manager.tasks.celery_tasks.run_scheduled_crew_task",
+        "schedule": 3600.0,  # seconds
+        "args": ("github", "github-mcp-server"),
+    },
+}
+```
+
+Then start the scheduler alongside a worker:
+
+```bash
+# Terminal 1: worker
+celery -A mcp_integration worker --loglevel=info
+
+# Terminal 2: scheduler
+celery -A mcp_integration beat --loglevel=info
+```
 
 ### Direct tool smoke test
 

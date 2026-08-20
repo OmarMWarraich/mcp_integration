@@ -146,3 +146,14 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 # Celery broker and result backend
 CELERY_BROKER_URL = os.getenv("BROKER_URL", "amqp://guest:guest@localhost:5672//")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+
+# Celery Beat schedule (optional)
+# Example: run the scheduled crew task every hour for a specific repo.
+# CELERY_BEAT_SCHEDULE = {
+#     "analyze-github-mcp-server-hourly": {
+#         "task": "mcp_manager.tasks.celery_tasks.run_scheduled_crew_task",
+#         "schedule": 3600.0,
+#         "args": ("github", "github-mcp-server"),
+#     },
+# }
+CELERY_BEAT_SCHEDULE = {}
