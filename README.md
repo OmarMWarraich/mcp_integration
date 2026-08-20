@@ -13,6 +13,8 @@ A Django + CrewAI application that analyzes GitHub repositories using the **GitH
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [RabbitMQ Setup](#rabbitmq-setup)
+- [PostgreSQL Migration](#postgresql-migration)
+- [Celery Result Backend](#celery-result-backend)
 - [Running the Project](#running-the-project)
 - [Usage](#usage)
 - [MCP Tool Wrapper](#mcp-tool-wrapper)
@@ -98,7 +100,7 @@ Key files:
 
 - Python 3.12+
 - Git
-- Docker & Docker Compose (for RabbitMQ)
+- Docker & Docker Compose (for PostgreSQL, RabbitMQ, and Redis)
 - A local copy of the [GitHub MCP Server](https://github.com/github/github-mcp-server) binary
 - A GitHub personal access token
 - An OpenAI API key (for CrewAI LLM)
@@ -113,6 +115,9 @@ Tested dependency versions:
 | openai | 2.54.0 |
 | Markdown | 3.10.3 |
 | requests | 2.34.2 |
+| psycopg | 3.3.4 |
+| redis | 8.1.0 |
+| celery | 5.6.3 |
 
 ---
 
@@ -135,7 +140,7 @@ Tested dependency versions:
 3. Install Python dependencies:
 
    ```bash
-   pip install django crewai langchain-openai requests markdown
+   pip install django crewai langchain-openai requests markdown psycopg[binary] redis
    ```
 
 4. Build or obtain the GitHub MCP Server binary and `mcpcurl`:
@@ -164,7 +169,17 @@ SECRET_KEY=your-django-secret-key
 OPENAI_API_KEY=sk-...
 GITHUB_PERSONAL_ACCESS_TOKEN=github_pat_...
 GITHUB_MCP_SERVER=/absolute/path/to/github-mcp-server
+
+# PostgreSQL
+DB_NAME=mcp_integration
+DB_USER=postgres
+DB_PASSWORD=yourpassword
+DB_HOST=localhost
+DB_PORT=5432
+
+# Celery
 BROKER_URL=amqp://user:pass@rabbitmq:5672//
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
 ```
 
 The project expects:
@@ -223,6 +238,76 @@ brew services start rabbitmq
 ```
 
 Then update `BROKER_URL` in `.env` to point to your local broker (e.g. `amqp://guest:guest@localhost:5672//`).
+
+---
+
+## PostgreSQL Migration
+
+The project uses PostgreSQL instead of SQLite for concurrency-safe operations.
+
+### Start PostgreSQL with Docker Compose
+
+From the project root, start the infrastructure stack:
+
+```bash
+docker compose up -d
+```
+
+This starts PostgreSQL on `localhost:5432` with the credentials defined in `docker-compose.yml`.
+
+### Create the application database
+
+The first time you start the container, create the database:
+
+```bash
+docker exec mcp_integration_db psql -U postgres -c "CREATE DATABASE mcp_integration;"
+```
+
+### Run Django migrations
+
+```bash
+python manage.py migrate
+```
+
+### PostgreSQL environment variables
+
+Django reads the database connection from `.env`:
+
+```env
+DB_NAME=mcp_integration
+DB_USER=postgres
+DB_PASSWORD=yourpassword
+DB_HOST=localhost
+DB_PORT=5432
+```
+
+### Avoiding port conflicts
+
+If you have a local PostgreSQL instance already running on port 5432 (e.g. from Homebrew), stop it before starting the Docker container:
+
+```bash
+brew services stop postgresql
+```
+
+---
+
+## Celery Result Backend
+
+Celery task results are stored in **Redis**.
+
+The Redis service is defined in `docker-compose.yml` and exposed on `localhost:6379`.
+
+Configure the backend in `.env`:
+
+```env
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+```
+
+### Why Redis for results?
+
+- Fast, in-memory storage for transient task metadata.
+- Simple to run alongside RabbitMQ in Docker Compose.
+- Can be swapped for PostgreSQL later if persistence requirements change.
 
 ---
 
