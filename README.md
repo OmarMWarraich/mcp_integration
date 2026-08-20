@@ -12,6 +12,7 @@ A Django + CrewAI application that analyzes GitHub repositories using the **GitH
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Configuration](#configuration)
+- [RabbitMQ Setup](#rabbitmq-setup)
 - [Running the Project](#running-the-project)
 - [Usage](#usage)
 - [MCP Tool Wrapper](#mcp-tool-wrapper)
@@ -97,6 +98,7 @@ Key files:
 
 - Python 3.12+
 - Git
+- Docker & Docker Compose (for RabbitMQ)
 - A local copy of the [GitHub MCP Server](https://github.com/github/github-mcp-server) binary
 - A GitHub personal access token
 - An OpenAI API key (for CrewAI LLM)
@@ -162,6 +164,7 @@ SECRET_KEY=your-django-secret-key
 OPENAI_API_KEY=sk-...
 GITHUB_PERSONAL_ACCESS_TOKEN=github_pat_...
 GITHUB_MCP_SERVER=/absolute/path/to/github-mcp-server
+BROKER_URL=amqp://user:pass@rabbitmq:5672//
 ```
 
 The project expects:
@@ -170,6 +173,56 @@ The project expects:
 - `GITHUB_MCP_SERVER` to point to the executable GitHub MCP Server binary.
 
 The GitHub token is forwarded to the MCP server process at runtime.
+
+---
+
+## RabbitMQ Setup
+
+The async Celery pipeline uses RabbitMQ as its message broker.
+
+### Start RabbitMQ with Docker Compose
+
+From the project root, run:
+
+```bash
+docker compose up -d rabbitmq
+```
+
+This starts:
+
+- RabbitMQ AMQP broker on `localhost:5672`
+- RabbitMQ Management UI on [http://localhost:15672](http://localhost:15672) (login: `user` / `pass`)
+
+### Stop RabbitMQ
+
+```bash
+docker compose down
+```
+
+To remove the persisted volume as well:
+
+```bash
+docker compose down -v
+```
+
+### Verify the broker is reachable
+
+```bash
+docker exec mcp_integration_rabbitmq rabbitmq-diagnostics ping
+```
+
+You should see `Health check passed`.
+
+### Manual installation (alternative)
+
+If you prefer not to use Docker, install RabbitMQ via Homebrew:
+
+```bash
+brew install rabbitmq
+brew services start rabbitmq
+```
+
+Then update `BROKER_URL` in `.env` to point to your local broker (e.g. `amqp://guest:guest@localhost:5672//`).
 
 ---
 
