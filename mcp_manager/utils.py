@@ -1,12 +1,14 @@
 
 import json
+import logging
 import os
 import subprocess
 import sys
 from typing import Any
-import requests
 
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _build_mcpcurl_args(arguments: dict[str, Any]) -> list[str]:
@@ -48,14 +50,14 @@ def mcp_tool(
         -> ./mcpcurl --stdio-server-cmd ... tools get_file_contents --owner octo --repo hello --path /
     """
     mcpcurl_name = "mcpcurl.exe" if sys.platform == "win32" else "mcpcurl"
-    mcpcurl_path = os.path.join(os.getcwd(), mcpcurl_name)
+    mcpcurl_path = os.path.join(str(settings.BASE_DIR), mcpcurl_name)
     github_mcp_server_path = os.getenv(
         "GITHUB_MCP_SERVER",
         getattr(settings, "GITHUB_MCP_SERVER", None),
     )
 
     if not github_mcp_server_path:
-        print("Error: GITHUB_MCP_SERVER environment variable is not set.")
+        logger.error("GITHUB_MCP_SERVER environment variable is not set.")
         return None
 
     server_cmd = f"{github_mcp_server_path} --toolsets {toolsets}"
@@ -78,7 +80,7 @@ def mcp_tool(
         "GITHUB_PERSONAL_ACCESS_TOKEN": getattr(settings, "GITHUB_PERSONAL_ACCESS_TOKEN", ""),
     }
 
-    print(f"mcp_tool executing command: {base_command}")
+    logger.info("mcp_tool executing command: %s", base_command)
 
     try:
         process = subprocess.Popen(
@@ -93,23 +95,23 @@ def mcp_tool(
         stdout, stderr = process.communicate(timeout=20)
 
         if stderr:
-            print(f"mcpcurl stderr: {stderr}")
+            logger.warning("mcpcurl stderr: %s", stderr)
 
         if stdout:
             try:
                 return json.loads(stdout)
             except json.JSONDecodeError:
-                print(f"mcpcurl stdout is not valid JSON: {stdout}")
+                logger.warning("mcpcurl stdout is not valid JSON: %s", stdout)
                 return stdout.strip()
 
         return None
 
     except FileNotFoundError:
-        print(f"Error: mcpcurl not found at {mcpcurl_path}")
+        logger.error("mcpcurl not found at %s", mcpcurl_path)
         return None
     except subprocess.TimeoutExpired:
-        print("Error: Timeout communicating with mcpcurl.")
+        logger.error("Timeout communicating with mcpcurl.")
         return None
     except Exception as exc:
-        print(f"An unexpected error occurred while running mcpcurl: {exc}")
+        logger.exception("An unexpected error occurred while running mcpcurl: %s", exc)
         return None

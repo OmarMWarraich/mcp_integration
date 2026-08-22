@@ -16,18 +16,19 @@ from ..tasks.tasks import (
 )
 
 
-def build_crew(owner: str, repo: str, process: Process = Process.sequential) -> Crew:
+def build_crew(owner: str, repo: str, output_dir: str = "generated_docs", process: Process = Process.sequential) -> Crew:
     """Assemble a CrewAI crew for the requested repository.
 
     The crew is stateless and built from scratch on every call, making it safe
-    to dispatch multiple times (idempotent). Pass `process=Process.parallel`
-    to run the four analysis tasks concurrently.
+    to dispatch multiple times (idempotent). `output_dir` isolates each run's
+    markdown artifacts. Pass `process=Process.parallel` to run the four
+    analysis tasks concurrently.
     """
     tasks = []
-    tasks.extend(analyze_repo_structure_task(owner, repo))
-    tasks.extend(get_issue_tasks(owner, repo))
-    tasks.extend(list_pull_requests_tasks(owner, repo))
-    tasks.extend(list_branches_tasks(owner, repo))
+    tasks.extend(analyze_repo_structure_task(owner, repo, output_dir))
+    tasks.extend(get_issue_tasks(owner, repo, output_dir))
+    tasks.extend(list_pull_requests_tasks(owner, repo, output_dir))
+    tasks.extend(list_branches_tasks(owner, repo, output_dir))
 
     return Crew(
         agents=[

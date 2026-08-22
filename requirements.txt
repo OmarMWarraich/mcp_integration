@@ -1,0 +1,11 @@
+Django==6.1
+crewai==1.15.17
+langchain-openai==1.6.0
+openai==2.54.0
+Markdown==3.10.3
+requests==2.34.2
+psycopg[binary]==3.3.4
+redis==8.1.0
+celery==5.6.3
+python-dotenv==1.2.3
+nh3==0.3.6

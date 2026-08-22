@@ -6,52 +6,27 @@ from typing import Any
 
 from celery import group, shared_task
 
-from ..crews.crew import build_crew
+from ..services.documentation import generate_documentation
 
 logger = logging.getLogger(__name__)
 
 
-def _serialize_crew_result(result: Any) -> dict[str, Any]:
-    """Convert a CrewAI result into a structured, JSON-serializable payload."""
-    try:
-        raw = str(result)
-    except Exception as exc:  # pragma: no cover
-        raw = f"<unserializable result: {exc}>"
-
-    return {
-        "raw_output": raw,
-        "serialized_at": time.time(),
-    }
-
-
-def _run_single_crew(owner: str, repo: str) -> dict[str, Any]:
-    """Execute a crew synchronously and return a serializable result.
+def _run_single_crew(owner: str, repo: str, run_id: str | None = None) -> dict[str, Any]:
+    """Execute a crew synchronously, persist the report, and return a serializable result.
 
     This helper is intentionally stateless: it builds a fresh crew every time
-    so repeated calls for the same owner/repo are idempotent.
+    so repeated calls for the same owner/repo are idempotent. Output files are
+    isolated per run, so concurrent runs never clobber each other.
     """
     logger.info("Running crew for %s/%s", owner, repo)
-    crew = build_crew(owner=owner, repo=repo)
-    result = crew.kickoff()
-    logger.info("Finished crew for %s/%s", owner, repo)
+    document = generate_documentation(owner=owner, repo=repo, run_id=run_id)
+    logger.info("Finished crew for %s/%s (document_id=%s)", owner, repo, document.pk)
     return {
         "owner": owner,
         "repo": repo,
         "status": "SUCCESS",
-        **_serialize_crew_result(result),
-    }
-
-
-def _format_error_payload(task_id: str | None, owner: str, repo: str, exc: Exception) -> dict[str, Any]:
-    """Build a clean, structured error payload for a failed crew run."""
-    logger.exception("Crew task failed for %s/%s (task_id=%s)", owner, repo, task_id)
-    return {
-        "task_id": task_id,
-        "owner": owner,
-        "repo": repo,
-        "status": "FAILURE",
-        "error": type(exc).__name__,
-        "message": str(exc),
+        "document_id": document.pk,
+        "serialized_at": time.time(),
     }
 
 
@@ -70,11 +45,7 @@ def run_crew_task(self, owner: str, repo: str) -> dict[str, Any]:
     exponential backoff.
     """
     logger.info("Starting crew task for %s/%s (task_id=%s)", owner, repo, self.request.id)
-    try:
-        payload = _run_single_crew(owner, repo)
-    except Exception as exc:
-        payload = _format_error_payload(self.request.id, owner, repo, exc)
-        raise self.retry(exc=exc) from exc
+    payload = _run_single_crew(owner, repo, run_id=self.request.id)
 
     payload["task_id"] = self.request.id
     logger.info("Completed crew task for %s/%s (task_id=%s)", owner, repo, self.request.id)
@@ -89,53 +60,43 @@ def run_crew_task(self, owner: str, repo: str) -> dict[str, Any]:
     retry_backoff=True,
 )
 def run_multiple_crews_task(self, repos: list[dict[str, str]]) -> dict[str, Any]:
-    """Run crews concurrently for multiple repositories.
+    """Dispatch crews concurrently for multiple repositories.
 
-    `repos` is a list of {"owner": str, "repo": str} dictionaries.
-    This task delegates each repo to `run_crew_task` via a Celery group,
-    collects the results, and returns a combined payload.
+    `repos` is a list of {"owner": str, "repo": str} dictionaries. Each repo is
+    delegated to `run_crew_task` via a Celery group and the child task IDs are
+    returned immediately — joining a group inside a task can deadlock workers
+    (guaranteed with the solo pool), so callers poll each child via
+    `/crew-status/<child_task_id>/`.
 
     Each child task has its own retry policy, so an error in one repo does not
-    fail the whole group.
+    affect the others.
     """
     logger.info("Starting multiple-crew task for %d repo(s) (task_id=%s)", len(repos), self.request.id)
 
     signatures = []
+    normalized: list[dict[str, str]] = []
     for item in repos:
         owner = str(item.get("owner", "")).strip()
         repo_name = str(item.get("repo", "")).strip()
         if not owner or not repo_name:
             raise ValueError(f"Invalid repo entry: {item}")
+        normalized.append({"owner": owner, "repo": repo_name})
         signatures.append(run_crew_task.s(owner=owner, repo=repo_name))  # type: ignore[arg-type]
 
-    job = group(*signatures)
-    result = job.apply_async()
+    result = group(*signatures).apply_async()
 
-    # NOTE: Joining a group inside a task can block a worker process; consider returning
-    # child task IDs instead if this becomes a bottleneck.
-    from celery.result import allow_join_result
+    children = [
+        {"task_id": child.id, **repo}
+        for child, repo in zip(result.children or [], normalized)
+    ]
 
-    with allow_join_result():
-        children = result.get(disable_sync_subtasks=False, propagate=False)
-
-    normalized_children: list[dict[str, Any]] = []
-    for child, repo in zip(children, repos):
-        if isinstance(child, Exception):
-            normalized_children.append(
-                _format_error_payload(None, str(repo.get("owner", "")), str(repo.get("repo", "")), child)
-            )
-        elif isinstance(child, dict):
-            normalized_children.append(child)
-        else:
-            normalized_children.append({"status": "SUCCESS", **_serialize_crew_result(child)})
-
-    logger.info("Finished multiple-crew task (task_id=%s)", self.request.id)
+    logger.info("Dispatched %d child crew task(s) (task_id=%s)", len(children), self.request.id)
 
     return {
         "task_id": self.request.id,
         "status": "SUCCESS",
-        "count": len(normalized_children),
-        "results": normalized_children,
+        "count": len(children),
+        "children": children,
     }
 
 
@@ -153,11 +114,7 @@ def run_scheduled_crew_task(self, owner: str, repo: str) -> dict[str, Any]:
     a dedicated entry point without interfering with on-demand executions.
     """
     logger.info("Starting scheduled crew task for %s/%s (task_id=%s)", owner, repo, self.request.id)
-    try:
-        payload = _run_single_crew(owner, repo)
-    except Exception as exc:
-        payload = _format_error_payload(self.request.id, owner, repo, exc)
-        raise self.retry(exc=exc) from exc
+    payload = _run_single_crew(owner, repo, run_id=self.request.id)
 
     payload["task_id"] = self.request.id
     payload["scheduled"] = True

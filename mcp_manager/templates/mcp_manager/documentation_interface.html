@@ -134,9 +134,25 @@
 
     {% if task_id %}
         <h2>Async Task Submitted</h2>
+        {% if repo_submitted %}<p>Repository: <code>{{ repo_submitted }}</code></p>{% endif %}
         <p>Task ID: <code>{{ task_id }}</code></p>
         <p>Status: <code id="task-status">{{ task_status|default:"PENDING" }}</code></p>
         <p><a href="{% url 'crew_status' task_id %}">View JSON status</a></p>
+        <script>
+            (function poll() {
+                fetch("{% url 'crew_status' task_id %}")
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        document.getElementById("task-status").textContent = data.status;
+                        if (data.status === "SUCCESS") {
+                            window.location.reload();
+                        } else if (data.status !== "FAILURE") {
+                            setTimeout(poll, 5000);
+                        }
+                    })
+                    .catch(function () { setTimeout(poll, 10000); });
+            })();
+        </script>
     {% endif %}
 
     {% if repos_submitted %}
