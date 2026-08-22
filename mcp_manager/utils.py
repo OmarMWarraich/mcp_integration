@@ -2,6 +2,7 @@
 import json
 import os
 import subprocess
+import sys
 from typing import Any
 import requests
 
@@ -46,7 +47,8 @@ def mcp_tool(
         mcp_tool("get_file_contents", {"owner": "octo", "repo": "hello", "path": "/"})
         -> ./mcpcurl --stdio-server-cmd ... tools get_file_contents --owner octo --repo hello --path /
     """
-    mcpcurl_path = os.path.join(os.getcwd(), "mcpcurl")
+    mcpcurl_name = "mcpcurl.exe" if sys.platform == "win32" else "mcpcurl"
+    mcpcurl_path = os.path.join(os.getcwd(), mcpcurl_name)
     github_mcp_server_path = os.getenv(
         "GITHUB_MCP_SERVER",
         getattr(settings, "GITHUB_MCP_SERVER", None),
@@ -70,7 +72,9 @@ def mcp_tool(
         * _build_mcpcurl_args(arguments),
     ]
 
+    # Merge with the parent env: Windows subprocesses need SystemRoot/PATH etc.
     env = {
+        **os.environ,
         "GITHUB_PERSONAL_ACCESS_TOKEN": getattr(settings, "GITHUB_PERSONAL_ACCESS_TOKEN", ""),
     }
 

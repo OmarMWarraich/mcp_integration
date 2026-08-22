@@ -11,6 +11,7 @@ A Django + CrewAI application that analyzes GitHub repositories using the **GitH
 - [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
+- [Building the MCP Binaries](#building-the-mcp-binaries)
 - [Configuration](#configuration)
 - [RabbitMQ Setup](#rabbitmq-setup)
 - [PostgreSQL Migration](#postgresql-migration)
@@ -207,9 +208,18 @@ Tested dependency versions:
 
 2. Create and activate a virtual environment:
 
+   **Unix (macOS / Linux):**
+
    ```bash
    python3.12 -m venv .venv
    source .venv/bin/activate
+   ```
+
+   **Windows (PowerShell):**
+
+   ```powershell
+   py -3.12 -m venv .venv
+   .\.venv\Scripts\Activate.ps1
    ```
 
 3. Install Python dependencies:
@@ -218,14 +228,17 @@ Tested dependency versions:
    pip install django crewai langchain-openai requests markdown psycopg[binary] redis celery
    ```
 
-4. Build or obtain the GitHub MCP Server binary and `mcpcurl`:
+4. Build or obtain the GitHub MCP Server binary and `mcpcurl` — see
+   [Building the MCP Binaries](#building-the-mcp-binaries) for full instructions.
+
+   In short, on any OS with Go installed:
 
    ```bash
-   # Example: place the compiled github-mcp-server binary next to this project
-   # /Users/owa/code/ai/agentic-workflow-crew-ai/github-mcp-server/github-mcp-server
-   # Copy or symlink the mcpcurl binary into this project root
-   ln -s /path/to/mcpcurl ./mcpcurl
+   go install github.com/github/github-mcp-server/cmd/github-mcp-server@latest
+   go install github.com/github/github-mcp-server/cmd/mcpcurl@latest
    ```
+
+   then copy the resulting binaries (`.exe` on Windows) into the project root.
 
 5. Run Django migrations:
 
@@ -235,15 +248,120 @@ Tested dependency versions:
 
 ---
 
+## Building the MCP Binaries
+
+The project needs two executables in the project root, built for **your** OS:
+
+| Binary | Unix name | Windows name | Purpose |
+| --- | --- | --- | --- |
+| GitHub MCP Server | `github-mcp-server` | `github-mcp-server.exe` | Serves GitHub MCP tools over stdio |
+| mcpcurl | `mcpcurl` | `mcpcurl.exe` | CLI client that spawns the server and invokes tools |
+
+> **Important:** A binary built on macOS/Linux will fail on Windows with
+> `[WinError 193] %1 is not a valid Win32 application`, and vice versa.
+> `github-mcp-server` has prebuilt releases for all platforms, but `mcpcurl`
+> has **no prebuilt release** and must be built from source with Go.
+
+### Prerequisites
+
+- [Go](https://go.dev/dl/) 1.22 or newer (`go version` to verify).
+
+### Option A — `go install` (recommended)
+
+Builds both binaries for your current OS/architecture straight from the module proxy.
+
+**Unix (macOS / Linux):**
+
+```bash
+go install github.com/github/github-mcp-server/cmd/github-mcp-server@latest
+go install github.com/github/github-mcp-server/cmd/mcpcurl@latest
+
+# Copy or symlink both binaries into the project root
+ln -s "$(go env GOPATH)/bin/github-mcp-server" ./github-mcp-server
+ln -s "$(go env GOPATH)/bin/mcpcurl" ./mcpcurl
+```
+
+**Windows (PowerShell):**
+
+```powershell
+go install github.com/github/github-mcp-server/cmd/github-mcp-server@latest
+go install github.com/github/github-mcp-server/cmd/mcpcurl@latest
+
+# Copy the .exe files into the project root
+$gobin = "$(go env GOPATH)\bin"
+Copy-Item "$gobin\github-mcp-server.exe", "$gobin\mcpcurl.exe" -Destination .
+```
+
+### Option B — build from a cloned repository
+
+Useful if you want to pin a specific version or modify the source.
+
+**Unix (macOS / Linux):**
+
+```bash
+git clone https://github.com/github/github-mcp-server.git
+cd github-mcp-server
+go build -o /path/to/mcp_integration/github-mcp-server ./cmd/github-mcp-server
+go build -o /path/to/mcp_integration/mcpcurl ./cmd/mcpcurl
+```
+
+**Windows (PowerShell):**
+
+```powershell
+git clone https://github.com/github/github-mcp-server.git
+cd github-mcp-server
+go build -o C:\path\to\mcp_integration\github-mcp-server.exe .\cmd\github-mcp-server
+go build -o C:\path\to\mcp_integration\mcpcurl.exe .\cmd\mcpcurl
+```
+
+### Option C — prebuilt server release (server only)
+
+Download `github-mcp-server` for your platform from the
+[releases page](https://github.com/github/github-mcp-server/releases/latest)
+(e.g. `github-mcp-server_Windows_x86_64.zip` or `github-mcp-server_Darwin_arm64.tar.gz`),
+extract it into the project root. You still need to build `mcpcurl` with Option A or B.
+
+### Cross-compiling
+
+Go can build for another OS from any machine, e.g. Windows binaries from macOS/Linux:
+
+```bash
+GOOS=windows GOARCH=amd64 go build -o mcpcurl.exe ./cmd/mcpcurl
+GOOS=windows GOARCH=amd64 go build -o github-mcp-server.exe ./cmd/github-mcp-server
+```
+
+### Verify the binaries
+
+**Unix:**
+
+```bash
+export GITHUB_PERSONAL_ACCESS_TOKEN=github_pat_...
+./mcpcurl --stdio-server-cmd "./github-mcp-server --toolsets repos stdio" tools get_file_contents --owner github --repo github-mcp-server --path /
+```
+
+**Windows (PowerShell):**
+
+```powershell
+$env:GITHUB_PERSONAL_ACCESS_TOKEN = "github_pat_..."
+.\mcpcurl.exe --stdio-server-cmd ".\github-mcp-server.exe --toolsets repos stdio" tools get_file_contents --owner github --repo github-mcp-server --path /
+```
+
+A JSON array of repository files confirms both binaries work. The `mcp_tool()` helper
+automatically picks `mcpcurl.exe` on Windows and `mcpcurl` on Unix.
+
+---
+
 ## Configuration
 
 Create a `.env` file in the project root with the following variables:
+
+**Unix (macOS / Linux):**
 
 ```env
 SECRET_KEY=your-django-secret-key
 OPENAI_API_KEY=sk-...
 GITHUB_PERSONAL_ACCESS_TOKEN=github_pat_...
-GITHUB_MCP_SERVER=/absolute/path/to/github-mcp-server
+GITHUB_MCP_SERVER=./github-mcp-server
 
 # PostgreSQL
 DB_NAME=mcp_integration
@@ -257,10 +375,16 @@ BROKER_URL=amqp://user:pass@localhost:5672//
 CELERY_RESULT_BACKEND=redis://localhost:6379/0
 ```
 
+**Windows:** identical, except the server binary needs the `.exe` extension:
+
+```env
+GITHUB_MCP_SERVER=./github-mcp-server.exe
+```
+
 The project expects:
 
-- `mcpcurl` to be located in the project root (`./mcpcurl`).
-- `GITHUB_MCP_SERVER` to point to the executable GitHub MCP Server binary.
+- `mcpcurl` (Unix) or `mcpcurl.exe` (Windows) to be located in the project root.
+- `GITHUB_MCP_SERVER` to point to the executable GitHub MCP Server binary for your OS.
 
 The GitHub token is forwarded to the MCP server process at runtime.
 
@@ -305,11 +429,20 @@ You should see `Health check passed`.
 
 ### Manual installation (alternative)
 
-If you prefer not to use Docker, install RabbitMQ via Homebrew:
+If you prefer not to use Docker, install RabbitMQ natively:
+
+**Unix (macOS):**
 
 ```bash
 brew install rabbitmq
 brew services start rabbitmq
+```
+
+**Windows (PowerShell):**
+
+```powershell
+choco install rabbitmq
+# or download the installer from https://www.rabbitmq.com/docs/install-windows
 ```
 
 Then update `BROKER_URL` in `.env` to point to your local broker (e.g. `amqp://guest:guest@localhost:5672//`).
@@ -318,10 +451,18 @@ Then update `BROKER_URL` in `.env` to point to your local broker (e.g. `amqp://g
 
 ### Avoiding port conflicts
 
-If you have a local RabbitMQ instance already running on port 5672 (e.g. from Homebrew), stop it before starting the Docker container:
+If you have a local RabbitMQ instance already running on port 5672, stop it before starting the Docker container:
+
+**Unix (macOS):**
 
 ```bash
 brew services stop rabbitmq
+```
+
+**Windows (PowerShell):**
+
+```powershell
+Stop-Service RabbitMQ
 ```
 
 ---
@@ -368,10 +509,18 @@ DB_PORT=5432
 
 ### Avoiding port conflicts
 
-If you have a local PostgreSQL instance already running on port 5432 (e.g. from Homebrew), stop it before starting the Docker container:
+If you have a local PostgreSQL instance already running on port 5432, stop it before starting the Docker container:
+
+**Unix (macOS):**
 
 ```bash
 brew services stop postgresql
+```
+
+**Windows (PowerShell):**
+
+```powershell
+Stop-Service postgresql*
 ```
 
 ---
@@ -418,6 +567,8 @@ CELERY_RESULT_BACKEND=redis://localhost:6379/0
 
 Make sure RabbitMQ and Redis are running, then run:
 
+**Unix (macOS / Linux):**
+
 ```bash
 celery -A mcp_integration worker --loglevel=info
 ```
@@ -426,6 +577,14 @@ For production-style deployments, you can tune concurrency:
 
 ```bash
 celery -A mcp_integration worker --loglevel=info --concurrency=4
+```
+
+**Windows (PowerShell):**
+
+Celery's default prefork pool is not supported on Windows — use the `solo` pool:
+
+```powershell
+celery -A mcp_integration worker --loglevel=info --pool=solo
 ```
 
 ### Inspect registered tasks
