@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import time
 from typing import Any
@@ -103,21 +102,40 @@ def run_multiple_crews_task(self, repos: list[dict[str, str]]) -> dict[str, Any]
 
     signatures = []
     for item in repos:
-        owner = item["owner"]
-        repo_name = item["repo"]
+        owner = str(item.get("owner", "")).strip()
+        repo_name = str(item.get("repo", "")).strip()
+        if not owner or not repo_name:
+            raise ValueError(f"Invalid repo entry: {item}")
         signatures.append(run_crew_task.s(owner=owner, repo=repo_name))  # type: ignore[arg-type]
 
     job = group(*signatures)
     result = job.apply_async()
-    children = result.get(disable_sync_subtasks=False)
+
+    # NOTE: Joining a group inside a task can block a worker process; consider returning
+    # child task IDs instead if this becomes a bottleneck.
+    from celery.result import allow_join_result
+
+    with allow_join_result():
+        children = result.get(disable_sync_subtasks=False, propagate=False)
+
+    normalized_children: list[dict[str, Any]] = []
+    for child, repo in zip(children, repos):
+        if isinstance(child, Exception):
+            normalized_children.append(
+                _format_error_payload(None, str(repo.get("owner", "")), str(repo.get("repo", "")), child)
+            )
+        elif isinstance(child, dict):
+            normalized_children.append(child)
+        else:
+            normalized_children.append({"status": "SUCCESS", **_serialize_crew_result(child)})
 
     logger.info("Finished multiple-crew task (task_id=%s)", self.request.id)
 
     return {
         "task_id": self.request.id,
         "status": "SUCCESS",
-        "count": len(children),
-        "results": children,
+        "count": len(normalized_children),
+        "results": normalized_children,
     }
 
 

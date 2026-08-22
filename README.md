@@ -464,18 +464,14 @@ Successful crew tasks return a structured JSON-serializable payload:
 }
 ```
 
-On failure, the payload contains:
+On failure, Celery marks the task as `FAILURE` and stores the raised exception in the result backend. When polling via `GET /crew-status/<task_id>/`, you will receive:
 
-```json
-{
-  "task_id": "a1b2c3d4-...",
-  "owner": "github",
-  "repo": "github-mcp-server",
-  "status": "FAILURE",
-  "error": "ExceptionName",
-  "message": "..."
-}
-```
+    {
+      "task_id": "a1b2c3d4-...",
+      "status": "FAILURE",
+      "error": "ExceptionName",
+      "message": "..."
+    }
 
 Each task is retried up to three times with exponential backoff before a failure is recorded.
 
@@ -749,11 +745,7 @@ If locks occur in PostgreSQL:
 
 - Look for long-running transactions in the worker logs.
 - Restart stuck workers.
-- Consider lowering Celery task visibility timeout if tasks are being redelivered:
-
-  ```python
-  CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 43200}
-  ```
+- If tasks are being redelivered with RabbitMQ, look for worker crashes / lost heartbeats and review acknowledgement-related settings such as `CELERY_TASK_ACKS_LATE` and `CELERY_WORKER_PREFETCH_MULTIPLIER`. (The `visibility_timeout` option applies to Redis/SQS brokers, not RabbitMQ.)
 
 ### RabbitMQ / broker connection issues
 

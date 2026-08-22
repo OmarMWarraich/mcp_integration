@@ -200,11 +200,24 @@ def run_crew(request):
         repos = body["repos"]
         if not isinstance(repos, list) or not repos:
             return JsonResponse({"error": "'repos' must be a non-empty list."}, status=400)
-        task = run_multiple_crews_task.delay(repos) # type: ignore
+
+        normalized: list[dict[str, str]] = []
+        for i, item in enumerate(repos):
+            if not isinstance(item, dict):
+                return JsonResponse({"error": f"'repos[{i}]' must be an object with 'owner' and 'repo'."}, status=400)
+            owner = str(item.get("owner", "")).strip()
+            repo_name = str(item.get("repo", "")).strip()
+            if not owner or not repo_name:
+                return JsonResponse({"error": f"'repos[{i}]' must include non-empty 'owner' and 'repo'."}, status=400)
+            normalized.append({"owner": owner, "repo": repo_name})
+
+        task = run_multiple_crews_task.delay(normalized)  # type: ignore
     elif "owner" in body and "repo" in body:
-        owner = body["owner"]
-        repo_name = body["repo"]
-        task = run_crew_task.delay(owner=owner, repo=repo_name) # type: ignore
+        owner = str(body["owner"]).strip()
+        repo_name = str(body["repo"]).strip()
+        if not owner or not repo_name:
+            return JsonResponse({"error": "'owner' and 'repo' must be non-empty strings."}, status=400)
+        task = run_crew_task.delay(owner=owner, repo=repo_name)  # type: ignore
     else:
         return JsonResponse(
             {"error": "Request must include either 'owner' and 'repo' or 'repos'."},

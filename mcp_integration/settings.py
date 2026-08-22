@@ -13,6 +13,10 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv()  # Loads variables from .env
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -133,9 +137,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 FILE_CHARSET = 'UTF-8'
 
-from dotenv import load_dotenv
-
-load_dotenv()  # Loads variables from .env
+# Environment variables are loaded near the top of this file.
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GITHUB_PERSONAL_ACCESS_TOKEN = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
