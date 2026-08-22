@@ -215,7 +215,7 @@ Tested dependency versions:
 3. Install Python dependencies:
 
    ```bash
-   pip install django crewai langchain-openai requests markdown psycopg[binary] redis
+   pip install django crewai langchain-openai requests markdown psycopg[binary] redis celery
    ```
 
 4. Build or obtain the GitHub MCP Server binary and `mcpcurl`:
