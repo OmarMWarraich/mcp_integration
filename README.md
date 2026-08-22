@@ -12,8 +12,13 @@ A Django + CrewAI application that analyzes GitHub repositories using the **GitH
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Configuration](#configuration)
+- [RabbitMQ Setup](#rabbitmq-setup)
+- [PostgreSQL Migration](#postgresql-migration)
+- [Celery Result Backend](#celery-result-backend)
+- [Celery Setup](#celery-setup)
 - [Running the Project](#running-the-project)
 - [Usage](#usage)
+- [API Endpoints](#api-endpoints)
 - [MCP Tool Wrapper](#mcp-tool-wrapper)
 - [Testing](#testing)
 - [Troubleshooting](#troubleshooting)
@@ -59,37 +64,110 @@ The current workflow accepts a GitHub repository URL, runs four CrewAI tasks seq
 ## Architecture
 
 ```text
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────────┐
-│  Django Web UI  │────▶│  CrewAI Process  │────▶│  MCP Tool Wrappers  │
-└─────────────────┘     └──────────────────┘     └─────────────────────┘
-                                                         │
-                                                         ▼
-                                                  ┌──────────────┐
-                                                  │   mcpcurl    │
-                                                  └──────────────┘
-                                                         │
-                                                         ▼
-                                                ┌──────────────────┐
-                                                │ GitHub MCP Server │
-                                                │   (stdio/spawn)  │
-                                                └──────────────────┘
-                                                         │
-                                                         ▼
-                                                  ┌─────────────┐
-                                                  │ GitHub API  │
-                                                  └─────────────┘
+                         ┌─────────────────────────────────────┐
+                         │         Clients / Users             │
+                         │  • Django Web UI (browser)          │
+                         │  • REST API clients (curl/scripts)  │
+                         └──────────────┬──────────────────────┘
+                                        │
+                                        ▼
+                         ┌─────────────────────────────────────┐
+                         │           Django Layer              │
+                         │  • mcp_manager/views.py             │
+                         │    - POST /run-crew/                │
+                         │    - GET  /crew-status/<id>/        │
+                         │  • Django admin & web templates     │
+                         └──────────────┬──────────────────────┘
+                                        │ enqueue / poll
+                                        ▼
+                         ┌─────────────────────────────────────┐
+                         │      Celery Distributed Queue       │
+                         │                                     │
+                         │   ┌──────────┐      ┌──────────┐   │
+                         │   │ RabbitMQ │      │  Redis   │   │
+                         │   │  broker  │      │  result  │   │
+                         │   │ :5672    │      │ backend  │   │
+                         │   └────┬─────┘      │ :6379    │   │
+                         │        │            └────┬─────┘   │
+                         │        └─────────────────┘           │
+                         │                  │                    │
+                         └──────────────────┼────────────────────┘
+                                            │
+                                            ▼
+                         ┌─────────────────────────────────────┐
+                         │         Celery Worker               │
+                         │  • run_crew_task                    │
+                         │  • run_multiple_crews_task          │
+                         │  • run_scheduled_crew_task          │
+                         │        │                            │
+                         │        ▼                            │
+                         │  ┌──────────────────────┐           │
+                         │  │   CrewAI Process     │           │
+                         │  │  • build_crew()      │           │
+                         │  │  • agents & tasks    │           │
+                         │  └──────────┬───────────┘           │
+                         │             │                       │
+                         │             ▼                       │
+                         │  ┌──────────────────────┐           │
+                         │  │   MCP Tool Wrappers  │           │
+                         │  │  • directory_scanner │           │
+                         │  │  • issue_retriever   │           │
+                         │  │  • pull_request_...  │           │
+                         │  │  • branch_lister     │           │
+                         │  └──────────┬───────────┘           │
+                         │             │                       │
+                         └─────────────┼───────────────────────┘
+                                       ▼
+                         ┌─────────────────────────────────────┐
+                         │   Infrastructure (Docker Compose)   │
+                         │  ┌──────────────┐ ┌──────────────┐  │
+                         │  │  PostgreSQL  │ │    Redis     │  │
+                         │  │   :5432      │ │   :6379      │  │
+                         │  │  persistent  │ │  transient   │  │
+                         │  │  task/Django │ │  results     │  │
+                         │  └──────────────┘ └──────────────┘  │
+                         │  ┌────────────────────────────────┐ │
+                         │  │  RabbitMQ :5672 / :15672       │ │
+                         │  │  Celery broker / management UI │ │
+                         │  └────────────────────────────────┘ │
+                         └─────────────────────────────────────┘
+                                       │
+                                       ▼
+                         ┌─────────────────────────────────────┐
+                         │       GitHub MCP Server Runtime     │
+                         │         • mcpcurl CLI               │
+                         │         • stdio subprocess          │
+                         └──────────────┬──────────────────────┘
+                                        │
+                                        ▼
+                         ┌─────────────────────────────────────┐
+                         │           GitHub API                │
+                         └─────────────────────────────────────┘
 ```
 
-Key files:
+### Request flow
 
-- [mcp_manager/utils.py](mcp_manager/utils.py) — central `mcp_tool()` helper.
-- [mcp_manager/tools/directory_scanner.py](mcp_manager/tools/directory_scanner.py) — `get_repo_files` tool.
-- [mcp_manager/tools/issue_retriever.py](mcp_manager/tools/issue_retriever.py) — `get_issue` tool.
-- [mcp_manager/tools/pull_request_lister.py](mcp_manager/tools/pull_request_lister.py) — `get_pull_requests` tool.
-- [mcp_manager/tools/branch_lister.py](mcp_manager/tools/branch_lister.py) — `get_branches` tool.
-- [mcp_manager/agents/agents.py](mcp_manager/agents/agents.py) — agent definitions.
-- [mcp_manager/tasks/tasks.py](mcp_manager/tasks/tasks.py) — task definitions.
+1. A user submits a repo via the Django web UI or a `POST /run-crew/` API call.
+2. The Django view validates the payload and enqueues a Celery task on RabbitMQ.
+3. The Celery worker picks up the task, builds the CrewAI crew, and executes agents.
+4. Agents invoke MCP tool wrappers, which spawn `mcpcurl` and the GitHub MCP Server.
+5. Task results are written to Redis and exposed through `GET /crew-status/<task_id>/`.
+6. PostgreSQL stores Django state, sessions, and future persistent report models.
+
+### Key files
+
+- [mcp_manager/views.py](mcp_manager/views.py) — Django API endpoints.
+- [mcp_manager/tasks/celery_tasks.py](mcp_manager/tasks/celery_tasks.py) — async Celery task definitions.
+- [mcp_integration/celery.py](mcp_integration/celery.py) — Celery app bootstrap.
+- [mcp_integration/settings.py](mcp_integration/settings.py) — broker/backend configuration.
 - [mcp_manager/crews/crew.py](mcp_manager/crews/crew.py) — crew assembly.
+- [mcp_manager/agents/agents.py](mcp_manager/agents/agents.py) — agent definitions.
+- [mcp_manager/tasks/tasks.py](mcp_manager/tasks/tasks.py) — CrewAI task definitions.
+- [mcp_manager/utils.py](mcp_manager/utils.py) — central `mcp_tool()` helper.
+- [mcp_manager/tools/directory_scanner.py](mcp_manager/tools/directory_scanner.py) — repo file tool.
+- [mcp_manager/tools/issue_retriever.py](mcp_manager/tools/issue_retriever.py) — issues tool.
+- [mcp_manager/tools/pull_request_lister.py](mcp_manager/tools/pull_request_lister.py) — PR tool.
+- [mcp_manager/tools/branch_lister.py](mcp_manager/tools/branch_lister.py) — branches tool.
 
 ---
 
@@ -97,6 +175,7 @@ Key files:
 
 - Python 3.12+
 - Git
+- Docker & Docker Compose (for PostgreSQL, RabbitMQ, and Redis)
 - A local copy of the [GitHub MCP Server](https://github.com/github/github-mcp-server) binary
 - A GitHub personal access token
 - An OpenAI API key (for CrewAI LLM)
@@ -111,6 +190,9 @@ Tested dependency versions:
 | openai | 2.54.0 |
 | Markdown | 3.10.3 |
 | requests | 2.34.2 |
+| psycopg | 3.3.4 |
+| redis | 8.1.0 |
+| celery | 5.6.3 |
 
 ---
 
@@ -133,7 +215,7 @@ Tested dependency versions:
 3. Install Python dependencies:
 
    ```bash
-   pip install django crewai langchain-openai requests markdown
+   pip install django crewai langchain-openai requests markdown psycopg[binary] redis celery
    ```
 
 4. Build or obtain the GitHub MCP Server binary and `mcpcurl`:
@@ -162,6 +244,17 @@ SECRET_KEY=your-django-secret-key
 OPENAI_API_KEY=sk-...
 GITHUB_PERSONAL_ACCESS_TOKEN=github_pat_...
 GITHUB_MCP_SERVER=/absolute/path/to/github-mcp-server
+
+# PostgreSQL
+DB_NAME=mcp_integration
+DB_USER=postgres
+DB_PASSWORD=yourpassword
+DB_HOST=localhost
+DB_PORT=5432
+
+# Celery
+BROKER_URL=amqp://user:pass@localhost:5672//
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
 ```
 
 The project expects:
@@ -170,6 +263,217 @@ The project expects:
 - `GITHUB_MCP_SERVER` to point to the executable GitHub MCP Server binary.
 
 The GitHub token is forwarded to the MCP server process at runtime.
+
+---
+
+## RabbitMQ Setup
+
+The async Celery pipeline uses RabbitMQ as its message broker.
+
+### Start RabbitMQ with Docker Compose
+
+From the project root, run:
+
+```bash
+docker compose up -d rabbitmq
+```
+
+This starts:
+
+- RabbitMQ AMQP broker on `localhost:5672`
+- RabbitMQ Management UI on [http://localhost:15672](http://localhost:15672) (login: `user` / `pass`)
+
+### Stop RabbitMQ
+
+```bash
+docker compose down
+```
+
+To remove the persisted volume as well:
+
+```bash
+docker compose down -v
+```
+
+### Verify the broker is reachable
+
+```bash
+docker exec mcp_integration_rabbitmq rabbitmq-diagnostics ping
+```
+
+You should see `Health check passed`.
+
+### Manual installation (alternative)
+
+If you prefer not to use Docker, install RabbitMQ via Homebrew:
+
+```bash
+brew install rabbitmq
+brew services start rabbitmq
+```
+
+Then update `BROKER_URL` in `.env` to point to your local broker (e.g. `amqp://guest:guest@localhost:5672//`).
+
+> **Note:** The default `.env` uses `localhost` because RabbitMQ is exposed on the host. If you later run the Django app or Celery workers inside the Docker Compose network, change the host to `rabbitmq` (the service name).
+
+### Avoiding port conflicts
+
+If you have a local RabbitMQ instance already running on port 5672 (e.g. from Homebrew), stop it before starting the Docker container:
+
+```bash
+brew services stop rabbitmq
+```
+
+---
+
+## PostgreSQL Migration
+
+The project uses PostgreSQL instead of SQLite for concurrency-safe operations.
+
+### Start PostgreSQL with Docker Compose
+
+From the project root, start the infrastructure stack:
+
+```bash
+docker compose up -d
+```
+
+This starts PostgreSQL on `localhost:5432` with the credentials defined in `docker-compose.yml`.
+
+### Create the application database
+
+The first time you start the container, create the database:
+
+```bash
+docker exec mcp_integration_db psql -U postgres -c "CREATE DATABASE mcp_integration;"
+```
+
+### Run Django migrations
+
+```bash
+python manage.py migrate
+```
+
+### PostgreSQL environment variables
+
+Django reads the database connection from `.env`:
+
+```env
+DB_NAME=mcp_integration
+DB_USER=postgres
+DB_PASSWORD=yourpassword
+DB_HOST=localhost
+DB_PORT=5432
+```
+
+### Avoiding port conflicts
+
+If you have a local PostgreSQL instance already running on port 5432 (e.g. from Homebrew), stop it before starting the Docker container:
+
+```bash
+brew services stop postgresql
+```
+
+---
+
+## Celery Result Backend
+
+Celery task results are stored in **Redis**.
+
+The Redis service is defined in `docker-compose.yml` and exposed on `localhost:6379`.
+
+Configure the backend in `.env`:
+
+```env
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+```
+
+### Why Redis for results?
+
+- Fast, in-memory storage for transient task metadata.
+- Simple to run alongside RabbitMQ in Docker Compose.
+- Can be swapped for PostgreSQL later if persistence requirements change.
+
+---
+
+## Celery Setup
+
+Celery is integrated with Django using RabbitMQ as the broker and Redis as the result backend.
+
+Key files:
+
+- [mcp_integration/celery.py](mcp_integration/celery.py) — Celery app configuration.
+- [mcp_manager/tasks/celery_tasks.py](mcp_manager/tasks/celery_tasks.py) — async crew task definition.
+
+### Configuration
+
+Celery reads the following settings from `.env` via `mcp_integration/settings.py`:
+
+```env
+BROKER_URL=amqp://user:pass@localhost:5672//
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+```
+
+### Start a Celery worker
+
+Make sure RabbitMQ and Redis are running, then run:
+
+```bash
+celery -A mcp_integration worker --loglevel=info
+```
+
+For production-style deployments, you can tune concurrency:
+
+```bash
+celery -A mcp_integration worker --loglevel=info --concurrency=4
+```
+
+### Inspect registered tasks
+
+```bash
+celery -A mcp_integration inspect registered
+```
+
+You should see:
+
+- `mcp_manager.tasks.celery_tasks.run_crew_task`
+- `mcp_manager.tasks.celery_tasks.run_multiple_crews_task`
+- `mcp_manager.tasks.celery_tasks.run_scheduled_crew_task`
+
+### Available tasks
+
+| Task | Purpose |
+| --- | --- |
+| `run_crew_task` | Run the analysis crew for a single repository. |
+| `run_multiple_crews_task` | Run crews for many repositories concurrently using a Celery group. |
+| `run_scheduled_crew_task` | Dedicated entry point for Celery Beat scheduled runs. |
+| `validate_crew_payload` | Pre-flight validation for batch payloads. |
+
+### Result payload
+
+Successful crew tasks return a structured JSON-serializable payload:
+
+```json
+{
+  "task_id": "a1b2c3d4-...",
+  "owner": "github",
+  "repo": "github-mcp-server",
+  "status": "SUCCESS",
+  "raw_output": "...",
+  "serialized_at": 1692432000.0
+}
+```
+
+On failure, Celery marks the task as `FAILURE` and stores the raised exception in the result backend. When polling via `GET /crew-status/<task_id>/`, you will receive:
+
+    {
+      "task_id": "a1b2c3d4-...",
+      "status": "FAILURE",
+      "error": "ExceptionName",
+      "message": "..."
+    }
+
+Each task is retried up to three times with exponential backoff before a failure is recorded.
 
 ---
 
@@ -192,6 +496,141 @@ The crew will run and return a combined HTML report.
 ---
 
 ## Usage
+
+### Async crew execution with Celery
+
+1. Make sure RabbitMQ and Redis are running:
+
+   ```bash
+   docker compose up -d
+   ```
+
+2. Start a Celery worker:
+
+   ```bash
+   celery -A mcp_integration worker --loglevel=info
+   ```
+
+3. Dispatch a task from a Django shell, view, or API:
+
+   ```python
+   from mcp_manager.tasks.celery_tasks import run_crew_task
+
+   task = run_crew_task.delay(owner="github", repo="github-mcp-server")
+   print(task.id)  # e.g. a1b2c3d4-...
+   ```
+
+4. Check the result:
+
+   ```python
+   result = run_crew_task.AsyncResult(task.id)
+   print(result.status)  # PENDING / STARTED / SUCCESS / FAILURE
+   print(result.result)  # payload once SUCCESS
+   ```
+
+### Trigger via HTTP API
+
+Start the Django development server and Celery worker, then trigger a run:
+
+```bash
+curl -X POST http://127.0.0.1:8000/run-crew/ \
+  -H "Content-Type: application/json" \
+  -d '{"owner": "github", "repo": "github-mcp-server"}'
+```
+
+Response:
+
+```json
+{"task_id": "a1b2c3d4-...", "status": "PENDING"}
+```
+
+For multiple repos:
+
+```bash
+curl -X POST http://127.0.0.1:8000/run-crew/ \
+  -H "Content-Type: application/json" \
+  -d '{"repos": [{"owner": "github", "repo": "github-mcp-server"}, {"owner": "django", "repo": "django"}]}'
+```
+
+### Check task status via API
+
+```bash
+curl http://127.0.0.1:8000/crew-status/a1b2c3d4-.../
+```
+
+Possible statuses: `PENDING`, `STARTED`, `SUCCESS`, `FAILURE`.
+
+---
+
+## API Endpoints
+
+| Method | Endpoint | Body | Response |
+| --- | --- | --- | --- |
+| `POST` | `/run-crew/` | `{"owner": "...", "repo": "..."}` or `{"repos": [...]}` | `{"task_id": "...", "status": "PENDING"}` |
+| `GET` | `/crew-status/<task_id>/` | — | `{"task_id": "...", "status": "...", "result": {...}}` |
+
+### `POST /run-crew/`
+
+Trigger a single crew run:
+
+```bash
+curl -X POST http://127.0.0.1:8000/run-crew/ \
+  -H "Content-Type: application/json" \
+  -d '{"owner": "github", "repo": "github-mcp-server"}'
+```
+
+Trigger multiple crew runs concurrently:
+
+```bash
+curl -X POST http://127.0.0.1:8000/run-crew/ \
+  -H "Content-Type: application/json" \
+  -d '{"repos": [{"owner": "github", "repo": "github-mcp-server"}]}'
+```
+
+### `GET /crew-status/<task_id>/`
+
+Poll for the result of a previously triggered task:
+
+```bash
+curl http://127.0.0.1:8000/crew-status/a1b2c3d4-.../
+```
+
+### Run multiple crews concurrently
+
+```python
+from mcp_manager.tasks.celery_tasks import run_multiple_crews_task
+
+repos = [
+    {"owner": "github", "repo": "github-mcp-server"},
+    {"owner": "django", "repo": "django"},
+]
+task = run_multiple_crews_task.delay(repos)
+print(task.id)
+```
+
+### Scheduled crew execution with Celery Beat
+
+Add a Beat schedule entry in `mcp_integration/settings.py`:
+
+```python
+CELERY_BEAT_SCHEDULE = {
+    "analyze-github-mcp-server-hourly": {
+        "task": "mcp_manager.tasks.celery_tasks.run_scheduled_crew_task",
+        "schedule": 3600.0,  # seconds
+        "args": ("github", "github-mcp-server"),
+    },
+}
+```
+
+Then start the scheduler alongside a worker:
+
+```bash
+# Terminal 1: worker
+celery -A mcp_integration worker --loglevel=info
+
+# Terminal 2: scheduler
+celery -A mcp_integration beat --loglevel=info
+```
 
 ### Direct tool smoke test
 
@@ -267,6 +706,113 @@ Check the printed command in the terminal and run it manually to see the raw ser
 ### `GITHUB_MCP_SERVER environment variable is not set`
 
 Ensure `.env` exists at the project root and contains `GITHUB_MCP_SERVER=/absolute/path/to/github-mcp-server`.
+
+### PostgreSQL: `database "mcp_integration" does not exist`
+
+Create the database inside the running container:
+
+```bash
+docker exec mcp_integration_db psql -U postgres -c "CREATE DATABASE mcp_integration;"
+```
+
+Then re-run migrations:
+
+```bash
+python manage.py migrate
+```
+
+### PostgreSQL: `could not connect to server: Connection refused`
+
+1. Confirm the container is running:
+
+   ```bash
+   docker compose ps
+   ```
+
+2. Verify `DB_HOST=localhost` and `DB_PORT=5432` in `.env`.
+3. Make sure no other PostgreSQL instance is bound to port 5432:
+
+   ```bash
+   lsof -i :5432
+   brew services stop postgresql
+   ```
+
+### DB locks / slow writes / `database is locked`
+
+This is the classic symptom of running SQLite under concurrency. The project now uses PostgreSQL to avoid this. If you still see `database is locked`, verify your `DATABASES` setting in `mcp_integration/settings.py` points to PostgreSQL, not SQLite.
+
+If locks occur in PostgreSQL:
+
+- Look for long-running transactions in the worker logs.
+- Restart stuck workers.
+- If tasks are being redelivered with RabbitMQ, look for worker crashes / lost heartbeats and review acknowledgement-related settings such as `CELERY_TASK_ACKS_LATE` and `CELERY_WORKER_PREFETCH_MULTIPLIER`. (The `visibility_timeout` option applies to Redis/SQS brokers, not RabbitMQ.)
+
+### RabbitMQ / broker connection issues
+
+Symptoms include:
+
+- `amqp.exceptions.AccessRefused`
+- `Connection refused` from Celery
+- Worker starts but shows `Connected to amqp://guest:**@127.0.0.1:5672//` instead of your configured broker
+
+Fix:
+
+1. Confirm RabbitMQ is running:
+
+   ```bash
+   docker exec mcp_integration_rabbitmq rabbitmq-diagnostics ping
+   ```
+
+2. Check that `BROKER_URL` in `.env` matches the RabbitMQ credentials:
+
+   ```env
+   BROKER_URL=amqp://user:pass@localhost:5672//
+   ```
+
+3. Stop any local RabbitMQ instance that may be shadowing the Docker port:
+
+   ```bash
+   brew services stop rabbitmq
+   ```
+
+4. Verify the management UI is reachable at [http://localhost:15672](http://localhost:15672).
+
+### Celery worker crashes or exits immediately
+
+Common causes and fixes:
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `ModuleNotFoundError` on startup | Worker started from wrong directory | Run from project root where `manage.py` lives. |
+| `AttributeError: 'Settings' object has no attribute '...'` | Missing env variable in `.env` | Ensure `.env` is loaded; run with `.venv/bin/python -m celery ...` if needed. |
+| Worker consumes memory until killed | CrewAI output is large; no result size limits | Use `--max-tasks-per-child=50` to recycle workers. |
+| `Received unregistered task` | Celery did not autodiscover tasks | Restart worker; check `celery -A mcp_integration inspect registered`. |
+| Tasks stay in `PENDING` | No worker is running, or worker is connected to a different broker | Start a worker and confirm broker URL. |
+| Worker dies with `OperationalError` | Cannot reach PostgreSQL, Redis, or RabbitMQ | Verify all Docker services are healthy (`docker compose ps`). |
+
+### Redis result backend errors
+
+If task statuses never progress from `PENDING`:
+
+1. Confirm Redis is running:
+
+   ```bash
+   docker exec mcp_integration_redis redis-cli ping
+   # expected: PONG
+   ```
+
+2. Verify `CELERY_RESULT_BACKEND=redis://localhost:6379/0` in `.env`.
+3. Make sure no other Redis instance is on port 6379:
+
+   ```bash
+   lsof -i :6379
+   ```
+
+### Worker logs show tasks but no output appears
+
+- Check that the worker and the Django app share the same `BROKER_URL` and `CELERY_RESULT_BACKEND` values.
+- Look for `Process exited with '1'` in the worker log, which often means the task raised an exception. Inspect the traceback and fix the underlying issue.
+- Ensure `GITHUB_MCP_SERVER` and `GITHUB_PERSONAL_ACCESS_TOKEN` are set in the worker's environment, not just the Django server environment.
 
 ---
 

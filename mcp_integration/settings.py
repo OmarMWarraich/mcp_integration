@@ -10,7 +10,12 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv()  # Loads variables from .env
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "testserver"]
 
 
 # Application definition
@@ -72,8 +77,12 @@ WSGI_APPLICATION = 'mcp_integration.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('DB_NAME', 'mcp_integration'),
+        'USER': os.getenv('DB_USER', 'postgres'),
+        'PASSWORD': os.getenv('DB_PASSWORD', 'yourpassword'),
+        'HOST': os.getenv('DB_HOST', 'localhost'),
+        'PORT': int(os.getenv('DB_PORT', '5432')),
     }
 }
 
@@ -128,13 +137,25 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 FILE_CHARSET = 'UTF-8'
 
-import os
-from dotenv import load_dotenv
-
-load_dotenv()  # Loads variables from .env
+# Environment variables are loaded near the top of this file.
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GITHUB_PERSONAL_ACCESS_TOKEN = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv("SECRET_KEY")
+
+# Celery broker and result backend
+CELERY_BROKER_URL = os.getenv("BROKER_URL", "amqp://guest:guest@localhost:5672//")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+
+# Celery Beat schedule (optional)
+# Example: run the scheduled crew task every hour for a specific repo.
+# CELERY_BEAT_SCHEDULE = {
+#     "analyze-github-mcp-server-hourly": {
+#         "task": "mcp_manager.tasks.celery_tasks.run_scheduled_crew_task",
+#         "schedule": 3600.0,
+#         "args": ("github", "github-mcp-server"),
+#     },
+# }
+CELERY_BEAT_SCHEDULE = {}

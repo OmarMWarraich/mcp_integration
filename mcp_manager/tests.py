@@ -1,7 +1,8 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import Client, SimpleTestCase, TestCase
+from django.urls import reverse
 
 from mcp_manager.tools import branch_lister, issue_retriever
 from mcp_manager.utils import mcp_tool
@@ -92,3 +93,43 @@ class McpToolTests(TestCase):
             toolsets="issues",
             read_only=True,
         )
+
+
+class RunCrewViewTests(SimpleTestCase):
+    def setUp(self):
+        self.client = Client(enforce_csrf_checks=True)
+        self.url = reverse("run_crew")
+
+    @patch("mcp_manager.views.run_crew_task.delay")
+    def test_run_crew_rejects_post_without_csrf_token(self, mock_delay):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"owner": "octo", "repo": "hello"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        mock_delay.assert_not_called()
+
+    @patch("mcp_manager.views.run_crew_task.delay")
+    @patch("mcp_manager.views.GeneratedDocument.objects.select_related")
+    def test_run_crew_accepts_post_with_csrf_token(self, mock_select_related, mock_delay):
+        mock_delay.return_value.id = "task-123"
+        mock_select_related.return_value.order_by.return_value.first.return_value = None
+
+        self.client.get(reverse("documentation_interface"))
+        csrf_token = self.client.cookies["csrftoken"].value
+
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"owner": "octo", "repo": "hello"}),
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+
+        self.assertEqual(response.status_code, 202)
+        self.assertJSONEqual(
+            response.content,
+            {"task_id": "task-123", "status": "PENDING"},
+        )
+        mock_delay.assert_called_once_with(owner="octo", repo="hello")

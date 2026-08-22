@@ -47,12 +47,31 @@
             color: #555;
         }
 
-        input[type="url"] {
+        input[type="url"], textarea {
             width: calc(100% - 12px);
             padding: 8px;
             border: 1px solid #ccc;
             border-radius: 4px;
             box-sizing: border-box;
+            font-family: monospace;
+        }
+
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .repo-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .repo-list li {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin-bottom: 6px;
         }
 
         button[type="submit"] {
@@ -86,21 +105,51 @@
     </style>
 </head>
 <body>
-    <h1>Generate Documentation for a GitHub Repository</h1>
+    <h1>Generate Documentation for GitHub Repositories</h1>
 
     {% if error %}
         <p style="color: red;">{{ error }}</p>
     {% endif %}
 
-        <form method="post" action="{% url 'generate_documentation' %}">
+    <form method="post" action="{% url 'generate_documentation' %}">
         {% csrf_token %}
         <div>
-            <label for="repo_url">GitHub Repository URL:</label>
+            <label for="repo_url">Single GitHub Repository URL:</label>
             <input type="url" id="repo_url" name="repo_url" size="60" placeholder="e.g., https://github.com/owner/repo">
         </div>
         <button type="submit">Generate Documentation</button>
     </form>
+
     <hr>
+
+    <form method="post" action="{% url 'generate_documentation_multiple' %}">
+        {% csrf_token %}
+        <div>
+            <label for="repo_urls">Multiple Repository URLs (one per line):</label>
+            <textarea id="repo_urls" name="repo_urls" placeholder="https://github.com/owner/repo-one&#10;https://github.com/owner/repo-two&#10;https://github.com/another/repo-three"></textarea>
+        </div>
+        <button type="submit">Analyze Multiple Repositories</button>
+    </form>
+    <hr>
+
+    {% if task_id %}
+        <h2>Async Task Submitted</h2>
+        <p>Task ID: <code>{{ task_id }}</code></p>
+        <p>Status: <code id="task-status">{{ task_status|default:"PENDING" }}</code></p>
+        <p><a href="{% url 'crew_status' task_id %}">View JSON status</a></p>
+    {% endif %}
+
+    {% if repos_submitted %}
+        <h2>Batch Analysis Submitted</h2>
+        <p>Task ID: <code>{{ batch_task_id }}</code></p>
+        <p>Repositories:</p>
+        <ul class="repo-list">
+            {% for r in repos_submitted %}
+                <li>{{ r.owner }}/{{ r.repo }}</li>
+            {% endfor %}
+        </ul>
+        <p><a href="{% url 'crew_status' batch_task_id %}">View JSON status</a></p>
+    {% endif %}
 
     {% if documentation %}
         <h2>
