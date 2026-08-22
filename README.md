@@ -603,14 +603,15 @@ You should see:
 
 | Task | Purpose |
 | --- | --- |
-| `run_crew_task` | Run the analysis crew for a single repository. |
-| `run_multiple_crews_task` | Run crews for many repositories concurrently using a Celery group. |
+| `run_crew_task` | Run the analysis crew for a single repository and persist the HTML report. |
+| `run_multiple_crews_task` | Dispatch crews for many repositories via a Celery group; returns child task IDs. |
 | `run_scheduled_crew_task` | Dedicated entry point for Celery Beat scheduled runs. |
 | `validate_crew_payload` | Pre-flight validation for batch payloads. |
 
 ### Result payload
 
-Successful crew tasks return a structured JSON-serializable payload:
+Successful single-repo crew tasks persist a sanitized HTML report as a
+`GeneratedDocument` row and return a structured JSON-serializable payload:
 
 ```json
 {
@@ -618,8 +619,23 @@ Successful crew tasks return a structured JSON-serializable payload:
   "owner": "github",
   "repo": "github-mcp-server",
   "status": "SUCCESS",
-  "raw_output": "...",
+  "document_id": 42,
   "serialized_at": 1692432000.0
+}
+```
+
+Batch tasks (`run_multiple_crews_task`) return immediately with the dispatched
+child task IDs; poll each child via `GET /crew-status/<child_task_id>/`:
+
+```json
+{
+  "task_id": "parent-id-...",
+  "status": "SUCCESS",
+  "count": 2,
+  "children": [
+    {"task_id": "child-1-...", "owner": "github", "repo": "github-mcp-server"},
+    {"task_id": "child-2-...", "owner": "django", "repo": "django"}
+  ]
 }
 ```
 
@@ -650,7 +666,10 @@ Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/) and paste a GitHub reposit
 https://github.com/github/github-mcp-server
 ```
 
-The crew will run and return a combined HTML report.
+The crew run is dispatched to Celery (a worker must be running); the page polls
+the task status every 5 seconds and reloads with the combined HTML report when
+the run completes. Each run writes its intermediate markdown files to an
+isolated `generated_docs/<task_id>/` directory, so concurrent runs are safe.
 
 ---
 
@@ -753,6 +772,12 @@ Poll for the result of a previously triggered task:
 ```bash
 curl http://127.0.0.1:8000/crew-status/a1b2c3d4-.../
 ```
+
+> **CSRF:** `POST /run-crew/` is protected by Django's CSRF middleware. Browser
+> clients must send the `X-CSRFToken` header (the token is set as the
+> `csrftoken` cookie after any GET). Headless clients should first GET a page
+> to obtain the cookie, or the endpoint can be placed behind token auth in
+> production.
 
 ### Run multiple crews concurrently
 
