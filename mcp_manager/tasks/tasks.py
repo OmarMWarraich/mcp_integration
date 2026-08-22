@@ -1,9 +1,11 @@
 from crewai import Task
-from ..agents.agents import repo_structure_auditor, issue_analyst, pull_requests_fetcher_reporter, branches_fetcher_reporter
-from ..tools.directory_scanner import get_repo_files
-from ..tools.issue_retriever import get_issue
-from ..tools.pull_request_lister import get_pull_requests
-from ..tools.branch_lister import get_branches
+from ..agents.agents import (
+    repo_structure_auditor,
+    issue_analyst,
+    pull_requests_fetcher_reporter,
+    branches_fetcher_reporter,
+)
+from ..tools.factory import get_branches, get_issue, get_pull_requests, get_repo_files
 
 # Analyze Repository
 def analyze_repo_structure_task(owner: str, repo: str, output_dir: str = "generated_docs"):

@@ -1,8 +1,5 @@
 from crewai import Agent
-from ..tools.directory_scanner import get_repo_files
-from ..tools.issue_retriever import get_issue
-from ..tools.pull_request_lister import get_pull_requests
-from ..tools.branch_lister import get_branches
+from ..tools.factory import get_branches, get_issue, get_pull_requests, get_repo_files
 
 ## Repository Structure Analyzer
 repo_structure_auditor = Agent(
