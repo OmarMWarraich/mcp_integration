@@ -25,9 +25,9 @@ issue_analyst = Agent(
     verbose = True
 )
 
-## Pull Requests Fetcher and Reporter
-pull_requests_fetcher_reporter = Agent(
-    role = "Pull Requests Fetcher and Reporter",
+## Pull Requests Reporter
+pull_requests_reporter = Agent(
+    role = "Pull Requests Reporter",
     goal = "Fetch and summarize the most recent pull requests for a GitHub repository.",
     backstory = (
         "You are a skilled developer who can analyze pull requests and provide concise summaries. "
@@ -38,7 +38,7 @@ pull_requests_fetcher_reporter = Agent(
 )
 
 ## Branches Fetcher and Reporter
-branches_fetcher_reporter = Agent(
+branches_reporter = Agent(
     role = "Branches Fetcher and Reporter",
     goal = "Fetch and summarize all branches for a GitHub repository.",
     backstory = (

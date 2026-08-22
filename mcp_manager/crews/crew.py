@@ -5,14 +5,14 @@ from crewai import Crew, Process
 from ..agents.agents import (
     repo_structure_auditor,
     issue_analyst,
-    pull_requests_fetcher_reporter,
-    branches_fetcher_reporter,
+    pull_requests_reporter,
+    branches_reporter,
 )
 from ..tasks.tasks import (
-    analyze_repo_structure_task,
-    get_issue_tasks,
-    list_pull_requests_tasks,
-    list_branches_tasks,
+    repo_structure_task,
+    issues_task,
+    pull_requests_task,
+    branches_task,
 )
 
 
@@ -25,17 +25,17 @@ def build_crew(owner: str, repo: str, output_dir: str = "generated_docs", proces
     analysis tasks concurrently.
     """
     tasks = []
-    tasks.extend(analyze_repo_structure_task(owner, repo, output_dir))
-    tasks.extend(get_issue_tasks(owner, repo, output_dir))
-    tasks.extend(list_pull_requests_tasks(owner, repo, output_dir))
-    tasks.extend(list_branches_tasks(owner, repo, output_dir))
+    tasks.extend(repo_structure_task(owner, repo, output_dir))
+    tasks.extend(issues_task(owner, repo, output_dir))
+    tasks.extend(pull_requests_task(owner, repo, output_dir))
+    tasks.extend(branches_task(owner, repo, output_dir))
 
     return Crew(
         agents=[
             repo_structure_auditor,
             issue_analyst,
-            pull_requests_fetcher_reporter,
-            branches_fetcher_reporter,
+            pull_requests_reporter,
+            branches_reporter,
         ],
         tasks=tasks,
         process=process,

@@ -2,13 +2,13 @@ from crewai import Task
 from ..agents.agents import (
     repo_structure_auditor,
     issue_analyst,
-    pull_requests_fetcher_reporter,
-    branches_fetcher_reporter,
+    pull_requests_reporter,
+    branches_reporter,
 )
 from ..tools.factory import get_branches, get_issue, get_pull_requests, get_repo_files
 
-# Analyze Repository
-def analyze_repo_structure_task(owner: str, repo: str, output_dir: str = "generated_docs"):
+
+def repo_structure_task(owner: str, repo: str, output_dir: str = "generated_docs"):
     return [
         Task(
             description = (
@@ -30,8 +30,7 @@ def analyze_repo_structure_task(owner: str, repo: str, output_dir: str = "genera
         )
     ]
 
-# Analyze GitHub Issues
-def get_issue_tasks(owner: str, repo: str, output_dir: str = "generated_docs"):
+def issues_task(owner: str, repo: str, output_dir: str = "generated_docs"):
     fetch_issue_task = Task(
         description = (
             f"Use the 'get_issue' tool to fetch a list of all open issues from the {owner}/{repo} repository. "
@@ -52,11 +51,11 @@ def get_issue_tasks(owner: str, repo: str, output_dir: str = "generated_docs"):
     )
     return [fetch_issue_task]
 
-def list_pull_requests_tasks(owner: str, repo: str, output_dir: str = "generated_docs"):
+def pull_requests_task(owner: str, repo: str, output_dir: str = "generated_docs"):
     fetch_pull_request_task = Task(
         description = f"Fetch a list of 5 most recently created pull requests for the {owner}/{repo} repository using the 'get_pull_requests' tool. Analyze the provided lists to identify key themes, active discussions, and potential areas of focus.",
         expected_output = f"A Markdown-formatted summary of the repository's pull requests. Provide a concise and categorical summary of the requests and your feedback for it.",
-        agent = pull_requests_fetcher_reporter,
+        agent = pull_requests_reporter,
         tools = [get_pull_requests],
         output_file = f"{output_dir}/pull_requests.md",
         create_directory = True,
@@ -64,11 +63,11 @@ def list_pull_requests_tasks(owner: str, repo: str, output_dir: str = "generated
     )
     return [fetch_pull_request_task]
 
-def list_branches_tasks(owner: str, repo: str, output_dir: str = "generated_docs"):
+def branches_task(owner: str, repo: str, output_dir: str = "generated_docs"):
     fetch_branches_task = Task(
         description = f"Fetch a list of all branches for the {owner}/{repo} repository using the 'get_branches' tool. Analyze the provided lists to identify key themes, active discussions, and potential areas of focus.",
         expected_output = f"A Markdown-formatted summary of the repository's branches. Provide a concise and categorical summary of the branches and your feedback for it.",
-        agent = branches_fetcher_reporter,
+        agent = branches_reporter,
         tools = [get_branches],
         output_file = f"{output_dir}/branches.md",
         create_directory = True,

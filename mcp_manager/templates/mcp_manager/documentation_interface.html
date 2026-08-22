@@ -35,6 +35,8 @@
     </form>
     <hr>
 
+    <p><a href="{% url 'report_history' %}">View report history</a></p>
+
     {% if task_id %}
         <h2>Async Task Submitted</h2>
         {% if repo_submitted %}<p>Repository: <code>{{ repo_submitted }}</code></p>{% endif %}

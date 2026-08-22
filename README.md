@@ -722,12 +722,25 @@ Response:
 {"task_id": "a1b2c3d4-...", "status": "PENDING"}
 ```
 
-For multiple repos:
+For multiple repos the response contains the child task IDs; poll each one
+via `/crew-status/<child_task_id>/`:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/run-crew/ \
   -H "Content-Type: application/json" \
   -d '{"repos": [{"owner": "github", "repo": "github-mcp-server"}, {"owner": "django", "repo": "django"}]}'
+```
+
+```json
+{
+  "task_id": "parent-id-...",
+  "status": "SUCCESS",
+  "count": 2,
+  "children": [
+    {"task_id": "child-1-...", "owner": "github", "repo": "github-mcp-server"},
+    {"task_id": "child-2-...", "owner": "django", "repo": "django"}
+  ]
+}
 ```
 
 ### Check task status via API
@@ -744,8 +757,11 @@ Possible statuses: `PENDING`, `STARTED`, `SUCCESS`, `FAILURE`.
 
 | Method | Endpoint | Body | Response |
 | --- | --- | --- | --- |
+| `POST` | `/generate/` | `repo_url` | HTML form redirect |
+| `POST` | `/generate-multiple/` | `repo_urls` (textarea) | HTML form redirect |
 | `POST` | `/run-crew/` | `{"owner": "...", "repo": "..."}` or `{"repos": [...]}` | `{"task_id": "...", "status": "PENDING"}` |
 | `GET` | `/crew-status/<task_id>/` | — | `{"task_id": "...", "status": "...", "result": {...}}` |
+| `GET` | `/history/` | — | HTML report history |
 
 ### `POST /run-crew/`
 

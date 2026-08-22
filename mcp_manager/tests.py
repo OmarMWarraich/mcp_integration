@@ -1,9 +1,16 @@
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from django.test import Client, SimpleTestCase, TestCase
 from django.urls import reverse
 
+from mcp_manager.services.documentation import (
+    combine_markdown_files,
+    convert_markdown_to_html,
+    extract_owner_repo,
+    run_output_dir,
+)
 from mcp_manager.tools import factory as tool_factory
 from mcp_manager.utils import mcp_tool
 
@@ -133,3 +140,30 @@ class RunCrewViewTests(SimpleTestCase):
             {"task_id": "task-123", "status": "PENDING"},
         )
         mock_delay.assert_called_once_with(owner="octo", repo="hello")
+
+
+class DocumentationServiceTests(TestCase):
+    def test_extract_owner_repo_accepts_variants(self):
+        self.assertEqual(extract_owner_repo("https://github.com/owner/repo.git"), ("owner", "repo"))
+        self.assertEqual(extract_owner_repo("http://www.github.com/o/r/"), ("o", "r"))
+        self.assertEqual(extract_owner_repo("github.com/a/b"), ("a", "b"))
+
+    def test_extract_owner_repo_rejects_non_github(self):
+        with self.assertRaises(ValueError):
+            extract_owner_repo("https://gitlab.com/a/b")
+
+    def test_combine_markdown_files_strips_markdown_fence(self):
+        run_id = "test-run-1"
+        output_dir = run_output_dir(run_id)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "repo_structure.md").write_text("```markdown\n# structure\n```\n")
+
+        combined = combine_markdown_files(output_dir, "owner", "repo")
+        self.assertIn("# structure", combined)
+        self.assertNotIn("```markdown", combined)
+
+    def test_convert_markdown_to_html_sanitizes_script_tags(self):
+        md = "# Hello\n\n<script>alert(1)</script>"
+        html = convert_markdown_to_html(md)
+        self.assertNotIn("<script>", html)
+        self.assertIn("<h1>", html)
