@@ -97,6 +97,7 @@ def generate_documentation(owner: str, repo: str, repo_url: str = "", run_id: st
         repository=repository,
         content=html_content,
         format="html",
+        task_id=run_id,
     )
     logger.info("Persisted document %s for %s/%s", document.pk, owner, repo)
     return document

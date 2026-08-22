@@ -11,6 +11,22 @@ from ..services.documentation import generate_documentation
 logger = logging.getLogger(__name__)
 
 
+def _get_or_create_run(task_id: str, owner: str, repo: str, status: str = "PENDING") -> Any:
+    """Deferred import helper: returns a CrewRun row for this task."""
+    from ..models import CrewRun, GitHubRepository
+
+    repository, _ = GitHubRepository.objects.get_or_create(
+        owner=owner,
+        name=repo,
+        defaults={"url": f"https://github.com/{owner}/{repo}"},
+    )
+    run, _ = CrewRun.objects.get_or_create(
+        task_id=task_id,
+        defaults={"repository": repository, "status": status},
+    )
+    return run
+
+
 def _run_single_crew(owner: str, repo: str, run_id: str | None = None) -> dict[str, Any]:
     """Execute a crew synchronously, persist the report, and return a serializable result.
 
@@ -44,11 +60,22 @@ def run_crew_task(self, owner: str, repo: str) -> dict[str, Any]:
     crew and return a fresh result. Errors are retried up to three times with
     exponential backoff.
     """
-    logger.info("Starting crew task for %s/%s (task_id=%s)", owner, repo, self.request.id)
-    payload = _run_single_crew(owner, repo, run_id=self.request.id)
+    task_id = self.request.id
+    logger.info("Starting crew task for %s/%s (task_id=%s)", owner, repo, task_id)
+    run = _get_or_create_run(task_id, owner, repo, status="PENDING")
+    try:
+        payload = _run_single_crew(owner, repo, run_id=task_id)
+        run.status = "SUCCESS"
+    except Exception as exc:
+        run.status = "FAILURE"
+        run.error_message = str(exc)
+        run.save()
+        raise
+    finally:
+        run.save()
 
-    payload["task_id"] = self.request.id
-    logger.info("Completed crew task for %s/%s (task_id=%s)", owner, repo, self.request.id)
+    payload["task_id"] = task_id
+    logger.info("Completed crew task for %s/%s (task_id=%s)", owner, repo, task_id)
     return payload
 
 
@@ -113,12 +140,23 @@ def run_scheduled_crew_task(self, owner: str, repo: str) -> dict[str, Any]:
     This is a thin wrapper around `_run_single_crew` so periodic tasks can target
     a dedicated entry point without interfering with on-demand executions.
     """
-    logger.info("Starting scheduled crew task for %s/%s (task_id=%s)", owner, repo, self.request.id)
-    payload = _run_single_crew(owner, repo, run_id=self.request.id)
+    task_id = self.request.id
+    logger.info("Starting scheduled crew task for %s/%s (task_id=%s)", owner, repo, task_id)
+    run = _get_or_create_run(task_id, owner, repo, status="PENDING")
+    try:
+        payload = _run_single_crew(owner, repo, run_id=task_id)
+        run.status = "SUCCESS"
+    except Exception as exc:
+        run.status = "FAILURE"
+        run.error_message = str(exc)
+        run.save()
+        raise
+    finally:
+        run.save()
 
-    payload["task_id"] = self.request.id
+    payload["task_id"] = task_id
     payload["scheduled"] = True
-    logger.info("Completed scheduled crew task for %s/%s (task_id=%s)", owner, repo, self.request.id)
+    logger.info("Completed scheduled crew task for %s/%s (task_id=%s)", owner, repo, task_id)
     return payload
 
 

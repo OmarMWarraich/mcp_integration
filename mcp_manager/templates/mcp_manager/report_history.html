@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report History</title>
+    <link rel="stylesheet" href="{% static 'mcp_manager/style.css' %}">
+</head>
+<body>
+    <h1>Generated Report History</h1>
+
+    {% if documents %}
+        <ul class="repo-list">
+            {% for doc in documents %}
+                <li>
+                    <strong>{{ doc.repository }}</strong>
+                    <span class="meta">({{ doc.timestamp|date:"Y-m-d H:i" }})</span>
+                    {% if doc.task_id %}— <code>{{ doc.task_id|slice:":8" }}</code>{% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No reports generated yet.</p>
+    {% endif %}
+
+    <p><a href="{% url 'documentation_interface' %}">Back to generator</a></p>
+</body>
+</html>

@@ -5,7 +5,7 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from .models import GeneratedDocument
+from .models import CrewRun, GeneratedDocument
 from .services.documentation import extract_owner_repo
 from .tasks.celery_tasks import run_crew_task, run_multiple_crews_task
 
@@ -144,16 +144,32 @@ def run_crew(request):
 
 
 @require_http_methods(["GET"])
+def report_history(request):
+    """Show the most recent generated reports across all repositories."""
+    documents = GeneratedDocument.objects.select_related("repository").order_by("-timestamp")[:20]
+    return render(request, "mcp_manager/report_history.html", {"documents": documents})
+
+
+@require_http_methods(["GET"])
 def crew_status(request, task_id: str):
     """Return the status and result of a Celery task by ID.
 
     Possible statuses: PENDING, STARTED, SUCCESS, FAILURE.
     """
-    result = run_crew_task.AsyncResult(task_id) # type: ignore
+    result = run_crew_task.AsyncResult(task_id)  # type: ignore
     response = {
         "task_id": task_id,
         "status": result.status,
     }
+
+    try:
+        run = CrewRun.objects.get(task_id=task_id)
+        response["repository"] = f"{run.repository.owner}/{run.repository.name}"
+        if run.status == CrewRun.Status.FAILURE:
+            response["error"] = run.status
+            response["message"] = run.error_message
+    except CrewRun.DoesNotExist:
+        pass
 
     if result.status == "SUCCESS":
         payload = result.result
